@@ -1,0 +1,283 @@
+{Ekow DS Game Editor}
+con _clkfreq = 300_000_000
+
+    R_JOY_X_MIN=4, R_JOY_X_MAX=252, R_JOY_Y_MIN=4, R_JOY_Y_MAX=252, L_JOY_X_MIN=2, L_JOY_X_MAX=254, L_JOY_Y_MIN=4, L_JOY_Y_MAX=252
+    #0, x, y, width, height
+    frame_time=75
+    collision_debug_mode=false
+
+obj
+    sprites : "DS_Sprites"
+    i2c     : "jm_i2c"
+
+var
+    byte data[8]
+    long character[4], enemy[4]
+    long Question1[4], Flower[4]
+    long delta_x, x_prev, y_prev, L_JOY_X, L_JOY_Y, collision, FireFlower, easter_egg
+    long character_top, character_bottom, character_rotation, character_moving, character_opacity, enemy_rotation
+    long frame_rate, frame_rate_wait_time, start_time, raw_loop_time, loop_time, display_delay
+    long stack_0[100], stack_1[100], stack_2[100], stack_3[100], stack_4[100], stack_5[100], stack_6[100], stack_7[100]
+
+pub video_game() | i
+    debug(`plot screen pos 100 0 size 768 640 backcolor black update)
+    debug(`screen set 400 330 blue text 50 'Loading sprites...')
+    debug(`screen update)
+    init_controller()
+    sprites.LoadSprites()
+    define_collision_areas()
+    easter_egg := false
+
+    character_top := 100
+    character_bottom := 101
+    character_opacity := 255
+
+    cogspin(1, character_motion(), @stack_1)
+    cogspin(2, gomba_motion(), @stack_2)
+    cogspin(7, debug_display(), @stack_7)
+
+    repeat
+        start_time := getct()
+        debug(`screen clear)
+
+        draw_background()
+
+        x_prev := character[x]
+        y_prev := character[y]
+        delta_x := abs(character[x] - x_prev)
+
+        read_controller()
+
+        L_JOY_X := 0 #> (data[0] - L_JOY_X_MIN) * 100 / (L_JOY_X_MAX - L_JOY_X_MIN) <# 100
+        L_JOY_Y := 0 #> (data[2] - L_JOY_Y_MIN) * 100 / (L_JOY_Y_MAX - L_JOY_Y_MIN) <# 100
+
+        case_fast L_JOY_X
+             0..20  : character[x] := 0 #> character[x] - 16 <# 740
+            21..30  : character[x] := 0 #> character[x] - 8 <# 740
+            31..40  : character[x] := 0 #> character[x] - 4 <# 740
+            61..70  : character[x] := 0 #> character[x] + 4 <# 740
+            71..80  : character[x] := 0 #> character[x] + 8 <# 740
+            81..100 : character[x] := 0 #> character[x] + 16 <# 740
+        case_fast L_JOY_Y
+             0..20  : character[y] := 128 #> character[y] - 16 <# 650
+            21..30  : character[y] := 128 #> character[y] - 8 <# 650
+            31..40  : character[y] := 128 #> character[y] - 4 <# 650
+            61..70  : character[y] := 128 #> character[y] + 4 <# 650
+            71..80  : character[y] := 128 #> character[y] + 8 <# 650
+            81..100 : character[y] := 128 #> character[y] + 16 <# 650
+
+        if character[x] <> x_prev
+            character_moving := true
+            if character[x] > x_prev
+                character_rotation := 0
+            elseif character[x] < x_prev
+                character_rotation := 1
+                character_moving := true
+        else
+            character_moving := false
+
+        debug(`screen set (`(character[x]), `(character[y])) sprite (`(character_top), `(character_rotation), 2, `(character_opacity)))
+        debug(`screen set (`(character[x]), `(character[y] - 32)) sprite (`(character_bottom), `(character_rotation), 2, `(character_opacity)))
+
+        debug(`screen set (`(enemy[0]), 96) sprite (128, `(enemy_rotation), 2))
+
+        collision := check_collision(@character, @enemy)
+        if collision == true
+            character_opacity := 64
+
+        if check_collision(@character, @Question1) == true
+            FireFlower := true
+
+        if FireFlower == true
+            debug(`screen set (`(Question1[0]), `(Question1[1] + 32)) sprite (126, 0, 2))
+            if check_collision(@character, @Flower)
+                character_opacity := 255
+
+        if (data[7] | %11101011) == %11101011 and character[0] > 444 and character[0] < 484 and character[1] > 408 and character[1] < 417
+            debug(`screen set 400 330 red text 50 'easter_egg!!!')
+            easter_egg := true
+
+        if data[6].[4] == 0
+            pause_game()
+
+        frame_rate := frame_time * 300_000 - abs(start_time - getct())
+        if frame_rate <= 0
+            debug(`screen set 384 600 red text 20 'Frame loop took longer than 100ms!!!')
+        waitct(frame_rate + getct())
+        debug(`screen update)
+        raw_loop_time := abs(start_time - getct())
+
+pub debug_display()
+    debug(`term term1 pos 867 0 size 28 12 textsize 18 color cyan)
+    display_delay := clkfreq / 5 + getct()
+
+    repeat
+        loop_time := raw_loop_time * 10 / 3000
+        frame_rate_wait_time := frame_rate * 10 / 3000
+        if pollct(display_delay) == true
+            debug(`term1 clear)
+            debug(`term1 'JoyX = `(L_JOY_X)',10)
+            debug(`term1 'JoyY = `(L_JOY_Y)',10)
+            debug(`term1 'character[x] = `(character[x])',10)
+            debug(`term1 'character[y] = `(character[y])',10)
+            debug(`term1 'delta_x = `(delta_x)',10)
+            debug(`term1 'loop_time = `(loop_time)' '�s',10)
+            debug(`term1 'Frame Wait Time = `(frame_rate_wait_time)' '�s',10)
+
+            debug(`term1 'Right Trigger = `(data[5])',10)
+
+            if data[7].[4] == 0
+                debug(`term1 'A button IS Pressed',10)
+            else
+                debug(`term1 'A button NOT Pressed',10)
+            if data[7].[2] == 0
+                debug(`term1 'Right Z button IS Pressed',10)
+            else
+                debug(`term1 'Right Z button NOT Pressed',10)
+            if collision == true
+                debug(`term1 'Collision Detected!')
+            else
+                debug(`term1 'All Clear')
+            display_delay := display_delay + clkfreq / 5
+
+pub gomba_motion()
+    repeat
+        repeat until enemy[0] >= 800
+            enemy[0] := enemy[0] + 6
+            toggle_enemy()
+        repeat until enemy[0] <= 300
+            enemy[0] := enemy[0] - 6
+            toggle_enemy()
+
+pub toggle_enemy()
+    if enemy_rotation == 0
+        enemy_rotation := 1
+        waitms(175)
+    elseif enemy_rotation == 1
+        enemy_rotation := 0
+        waitms(175)
+
+pub character_motion()
+    repeat
+        if character_moving == false
+            character_bottom := 101
+        repeat until character_moving == true
+        case character_bottom
+            101 : character_bottom := 102
+            102 : character_bottom := 103
+            103 : character_bottom := 105
+            105 : character_bottom := 101
+        waitms(50 #> 600 / delta_x <# 333)
+
+pub define_collision_areas()
+    character[x] := 100
+    character[y] := 128
+    character[width] := 32
+    character[height] := 64
+
+    enemy[0] := 800
+    enemy[1] := 96
+    enemy[2] := 32
+    enemy[3] := 32
+
+    Question1[0] := 240
+    Question1[1] := 220
+    Question1[2] := 32
+    Question1[3] := 32
+
+    Flower[0] := 240
+    Flower[1] := 252
+    Flower[2] := 32
+    Flower[3] := 32
+
+pub check_collision(Box1address, Box2address) : CollisionState
+    CollisionState~
+    if long[Box1address] < (long[Box2address] + long[Box2address][2]) and {
+                        }(long[Box1address] + long[Box1address][2]) > long[Box2address] and {
+                                 } long[Box1address][1] > (long[Box2address][1] - long[Box2address][3]) and {
+                                            } (long[Box1address][1] - long[Box1address][3]) < (long[Box2address][1])
+        CollisionState := true
+    else
+        CollisionState := false
+
+    if collision_debug_mode == true
+        debug(`screen set `(long[Box1address]) `(long[Box1address][1]) red line `(long[Box1address] + long[Box1address][2])) `(long[Box1address][1]))
+        debug(`screen set `(long[Box1address] + long[Box1address][2])) `(long[Box1address][1])) red line `(long[Box1address] + long[Box1address][2])) `(long[Box1address][1] - long[Box1address][3]))
+        debug(`screen set `(long[Box1address] + long[Box1address][2])) `(long[Box1address][1] - long[Box1address][3])) red line `(long[Box1address])) `(long[Box1address][1] - long[Box1address][3]))
+        debug(`screen set `(long[Box1address])) `(long[Box1address][1] - long[Box1address][3])) red line `(long[Box1address]) `(long[Box1address][1]))
+
+        debug(`screen set `(long[Box2address]) `(long[Box2address][1]) red line `(long[Box2address] + long[Box2address][2])) `(long[Box2address][1]))
+        debug(`screen set `(long[Box2address] + long[Box2address][2])) `(long[Box2address][1])) red line `(long[Box2address] + long[Box2address][2])) `(long[Box2address][1] - long[Box2address][3]))
+        debug(`screen set `(long[Box2address] + long[Box2address][2])) `(long[Box2address][1] - long[Box2address][3])) red line `(long[Box2address])) `(long[Box2address][1] - long[Box2address][3]))
+        debug(`screen set `(long[Box2address])) `(long[Box2address][1] - long[Box2address][3])) red line `(long[Box2address]) `(long[Box2address][1]))
+
+        if CollisionState == true
+            debug(`screen set 400 330 red text 50 'Collision!!!')
+
+pub pause_game()
+    debug(`screen set 400 330 red text 50 '<PAUSED>')
+    debug(`screen update `dly(1000))
+    read_controller()
+    repeat until data[6].[4] == 0
+        read_controller()
+        waitms(100)
+    repeat until data[6].[4] == 1
+        read_controller()
+    start_time := getct()
+
+pub draw_background() | i, j
+    debug(`screen set 384 352 color $6B8CFF box 768 574)
+
+    repeat i from 0 to 800 step 32
+            debug(`screen set (`(i), 64) sprite (132, 0, 2))
+
+    debug(`screen set (640, 400) sprite (135, 0, 2))
+    debug(`screen set (688, 400) sprite (136, 0, 2))
+    debug(`screen set (720, 400) sprite (136, 0, 2))
+    debug(`screen set (240, 112) sprite (137, 0, 2))
+    debug(`screen set (304, 112) sprite (138, 0, 2))
+    debug(`screen set (512, 96) sprite (133, 0, 2))
+    debug(`screen set (656, 128) sprite (139, 0, 2))
+    debug(`screen set (240, 220) sprite (116, 0, 2))
+    debug(`screen set (400, 220) sprite (130, 0, 2))
+    debug(`screen set (432, 220) sprite (116, 0, 2))
+    debug(`screen set (464, 220) sprite (130, 0, 2))
+    debug(`screen set (496, 220) sprite (116, 0, 2))
+    debug(`screen set (528, 220) sprite (130, 0, 2))
+    debug(`screen set (464, 350) sprite (116, 0, 2))
+
+con
+pub init_controller()
+    i2c.setup(10, 11, 400, i2c.PU_1K5)
+    i2c.start()
+    i2c.write($A4)
+    i2c.write($F0)
+    i2c.write($55)
+    i2c.stop()
+    i2c.start()
+    i2c.write($A4)
+    i2c.write($FB)
+    i2c.write($00)
+    i2c.stop()
+    waitus(150)
+
+    i2c.start()
+    i2c.write($A4)
+    i2c.write($FE)
+    i2c.write($03)
+    i2c.stop()
+    waitus(150)
+
+pub read_controller() | i
+    i2c.start()
+    i2c.write($A4)
+    i2c.write($00)
+    i2c.stop()
+    waitus(150)
+
+    i2c.start()
+    i2c.write($A5)
+    repeat i from 0 to 6
+        data[i] := i2c.read(0)
+    data[7] := i2c.read(1)
+    i2c.stop()
