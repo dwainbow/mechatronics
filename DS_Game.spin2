@@ -8,6 +8,7 @@ con _clkfreq = 300_000_000
 
 obj
     sprites : "DS_Sprites"
+    ' sprites: "standing_sprites"
     i2c     : "jm_i2c"
 
 var
@@ -41,14 +42,14 @@ pub video_game() | i
     character_opacity:=255
     character_animation_state:= 0
 
-    character_top_left := 4
-    character_top_right := 5
-    character_bottom_left := 12
-    character_bottom_right := 13
+    character_top_left := 1
+    character_top_right := 2
+    character_bottom_left := 3
+    character_bottom_right := 4
 
     cogspin(1, character_motion(), @stack_1)
-    ' cogspin(7, debug_display(), @stack_7)
-    ' cogspin(6,debug_character_motion(), @stack_6)
+    cogspin(7, debug_display(), @stack_7)
+    cogspin(6,debug_character_motion(), @stack_6)
 
     repeat
         start_time := getct()
@@ -60,10 +61,14 @@ pub video_game() | i
         L_JOY_X := 0 #> (data[0] - L_JOY_X_MIN) * 100 / (L_JOY_X_MAX - L_JOY_X_MIN) <# 100
         L_JOY_Y := 0 #> (data[2] - L_JOY_Y_MIN) * 100 / (L_JOY_Y_MAX - L_JOY_Y_MIN) <# 100
 
-        if is_button_pressed("X")
+        ' if L_JOY_X ==100
+        '     L_JOY_X := 50
+        '     character_animation_state := 0
+
+        if is_button_pressed("A")
             character_hitting := true
             character_animation_state := 2
-        elseif is_button_pressed("A") and character_jumping == false
+        elseif is_button_pressed("X") and character_jumping == false
             character_jumping := true
             character_animation_state := 3
         elseif (L_JOY_X < 45 or L_JOY_X > 55) or (L_JOY_Y < 45 or L_JOY_Y > 55)
@@ -106,38 +111,38 @@ pub video_game() | i
         debug(`screen update)
         raw_loop_time := abs(start_time - getct())
 
-' pub debug_display()
-'     debug(`term term1 pos 867 0 size 28 12 textsize 18 color cyan)
-'     display_delay := clkfreq / 5 + getct()
+pub debug_display()
+    debug(`term term1 pos 867 0 size 28 12 textsize 18 color cyan)
+    display_delay := clkfreq / 5 + getct()
 
-'     repeat
-'         loop_time := raw_loop_time * 10 / 3000
-'         frame_rate_wait_time := frame_rate * 10 / 3000
-'         if pollct(display_delay) == true
-'             debug(`term1 clear)
-'             debug(`term1 'JoyX = `(L_JOY_X)',10)
-'             debug(`term1 'JoyY = `(L_JOY_Y)',10)
-'             debug(`term1 'character[x] = `(character[x])',10)
-'             debug(`term1 'character[y] = `(character[y])',10)
-'             debug(`term1 'character_moving = `(character_moving)',10)
-'             debug(`term1 'loop_time = `(loop_time)' '�s',10)
-'             debug(`term1 'Frame Wait Time = `(frame_rate_wait_time)' '�s',10)
+    repeat
+        loop_time := raw_loop_time * 10 / 3000
+        frame_rate_wait_time := frame_rate * 10 / 3000
+        if pollct(display_delay) == true
+            debug(`term1 clear)
+            debug(`term1 'JoyX = `(L_JOY_X)',10)
+            debug(`term1 'JoyY = `(L_JOY_Y)',10)
+            debug(`term1 'character[x] = `(character[x])',10)
+            debug(`term1 'character[y] = `(character[y])',10)
+            debug(`term1 'character_moving = `(character_moving)',10)
+            debug(`term1 'loop_time = `(loop_time)' '�s',10)
+            debug(`term1 'Frame Wait Time = `(frame_rate_wait_time)' '�s',10)
 
-'             debug(`term1 'Right Trigger = `(data[5])',10)
+            debug(`term1 'Right Trigger = `(data[5])',10)
 
-'             if is_button_pressed("A")
-'                 debug(`term1 'A button IS Pressed',10)
-'             else
-'                 debug(`term1 'A button NOT Pressed',10)
-'             if data[7].[2] == 0
-'                 debug(`term1 'Right Z button IS Pressed',10)
-'             else
-'                 debug(`term1 'Right Z button NOT Pressed',10)
-'             if collision == true
-'                 debug(`term1 'Collision Detected!')
-'             else
-'                 debug(`term1 'All Clear')
-'             display_delay := display_delay + clkfreq / 5
+            if is_button_pressed("A")
+                debug(`term1 'A button IS Pressed',10)
+            else
+                debug(`term1 'A button NOT Pressed',10)
+            if data[7].[2] == 0
+                debug(`term1 'Right Z button IS Pressed',10)
+            else
+                debug(`term1 'Right Z button NOT Pressed',10)
+            if collision == true
+                debug(`term1 'Collision Detected!')
+            else
+                debug(`term1 'All Clear')
+            display_delay := display_delay + clkfreq / 5
 
 pub is_button_pressed(button) : boolean
     case button
@@ -157,31 +162,31 @@ pub is_button_pressed(button) : boolean
             return data[6].[5] == 0
         other:
             return false
-' pub debug_character_motion()
-'     debug(`term term2 pos 1150 0 size 32 12 textsize 18 color yellow)
-'     display_delay := clkfreq / 4 + getct()
+pub debug_character_motion()
+    debug(`term term2 pos 1150 0 size 32 12 textsize 18 color yellow)
+    display_delay := clkfreq / 4 + getct()
 
-'     repeat
-'         if pollct(display_delay)
-'             debug(`term2 clear)
+    repeat
+        if pollct(display_delay)
+            debug(`term2 clear)
 
-'             debug(`term2 '--- Animation Debug ---',10)
-'             debug(`term2 'character_moving  = `(character_moving)',10)
-'             debug(`term2 'character_hitting = `(character_hitting)',10)
-'             debug(`term2 'Top Left Sprite     = `(character_top_left)',10)
-'             debug(`term2 'Top Right Sprite    = `(character_top_right)',10)
-'             debug(`term2 'Bottom Left Sprite  = `(character_bottom_left)',10)
-'             debug(`term2 'Bottom Right Sprite = `(character_bottom_right)',10)
-'             debug(`term2 'Rotation (0=R,1=L)  = `(character_rotation)',10)
+            debug(`term2 '--- Animation Debug ---',10)
+            debug(`term2 'character_moving  = `(character_moving)',10)
+            debug(`term2 'character_hitting = `(character_hitting)',10)
+            debug(`term2 'Top Left Sprite     = `(character_top_left)',10)
+            debug(`term2 'Top Right Sprite    = `(character_top_right)',10)
+            debug(`term2 'Bottom Left Sprite  = `(character_bottom_left)',10)
+            debug(`term2 'Bottom Right Sprite = `(character_bottom_right)',10)
+            debug(`term2 'Rotation (0=R,1=L)  = `(character_rotation)',10)
 
-'             if character_hitting == true
-'                 debug(`term2 'Status: HITTING animation active',10)
-'             elseif character_moving == true
-'                 debug(`term2 'Status: RUNNING animation active',10)
-'             else
-'                 debug(`term2 'Status: STANDING animation active',10)
+            ' if character_hitting == true
+            '     debug(`term2 'Status: HITTING animation active',10)
+            ' elseif character_moving == true
+            '     debug(`term2 'Status: RUNNING animation active',10)
+            ' else
+            '     debug(`term2 'Status: STANDING animation active',10)
 
-'             display_delay := getct() + clkfreq / 4
+            display_delay := getct() + clkfreq / 4
 pub character_motion()
     repeat
         case character_animation_state
@@ -195,47 +200,46 @@ pub character_motion()
 
 
 pub trigger_hit_animation()
-    character_top_left := 201
-    character_top_right := 202
-    character_bottom_left := 222
-    character_bottom_right := 223
+    character_top_left := 50
+    character_top_right := 51
+    character_bottom_left := 52
+    character_bottom_right := 53
 
-    repeat 3
-        advance_frame_4(@character_top_left, 201, 203, 205, 207)
-        advance_frame_4(@character_top_right, 202, 204, 206, 208)
-        advance_frame_4(@character_bottom_left, 222, 224, 226, 228)
-        advance_frame_4(@character_bottom_right, 223, 225, 227, 229)
-        waitms(100)
+    repeat 4
+        advance_frame_2(@character_top_left,50, 54)
+        advance_frame_2(@character_top_right, 51, 55)
+
+        character_top_left :=0
+        character_top_right := 0
+        advance_frame_4(@character_bottom_left, 52, 56, 59, 61)
+        advance_frame_4(@character_bottom_right, 53, 57, 60, 62)
+        waitms(300)
     character_hitting:=false
     character_animation_state := 0
 
 pub trigger_jumping_animation()
-    character_top_left := 2
-    character_top_right := 95
-    character_bottom_left := 110
-    character_bottom_right := 111
+    character_top_left := 30
+    character_top_right := 31
+    character_bottom_left := 32
+    character_bottom_right := 33
 
-    advance_frame_5(@character_top_left, 2, 96, 98, 100, 102)
-    advance_frame_5(@character_top_right, 95, 97, 99, 101, 103)
-    advance_frame_5(@character_bottom_left, 110, 112, 114, 116, 118)
-    advance_frame_5(@character_bottom_right, 111, 113, 115, 117, 119)
-
+    advance_frame_4(@character_top_left, 30, 34, 38, 42)
+    advance_frame_4(@character_top_right, 31, 35, 39, 43)
+    advance_frame_4(@character_bottom_left, 32, 36, 40, 44)
+    advance_frame_4(@character_bottom_right, 33, 37, 41, 45)
     jump_help:=100
     repeat while character[y] < 400
         if jump_help< 0
             jump_help := 0
         character[y] := character[y] + jump_help
         jump_help := jump_help - 10
-    
-    
-    
 
     repeat while character_jumping and character[y] > starting_y
-        advance_frame_2(@character_top_left, 100, 102)
-        advance_frame_2(@character_top_right, 101, 103)
-        advance_frame_2(@character_bottom_left, 116, 118)
-        advance_frame_2(@character_bottom_right, 117, 119)
-        
+        ' advance_frame_2(@character_top_left, 100, 102)
+        ' advance_frame_2(@character_top_right, 101, 103)
+        ' advance_frame_2(@character_bottom_left, 116, 118)
+        ' advance_frame_2(@character_bottom_right, 117, 119)
+
         if character[y] <= starting_y
             character_jumping := false
             quit
@@ -246,7 +250,7 @@ pub trigger_jumping_animation()
 
         gravity := gravity + 2
         waitms(100)
-    
+
     if character[y] <= starting_y
         character[y] := starting_y
 
@@ -256,28 +260,16 @@ pub trigger_jumping_animation()
     waitms(100)
 
 pub trigger_standing_animation()
-    character_top_left := 4
-    character_top_right := 5
-    character_bottom_left := 12
-    character_bottom_right := 13
+    character_top_left := 1
+    character_top_right := 2
+    character_bottom_left := 3
+    character_bottom_right := 4
     ' repeat while character_moving == false
-        advance_frame_4(@character_top_left, 4, 6, 8, 10)
-        advance_frame_4(@character_top_right, 5, 7, 9, 11)
-        advance_frame_4(@character_bottom_left, 12, 14, 16, 18)
-        advance_frame_4(@character_bottom_right, 13, 15, 17, 19)
-        waitms(100)
-
-pub trigger_running_animation()
-    character_top_left := 23
-    character_top_right := 24
-    character_bottom_left := 39
-    character_bottom_right := 40
-    repeat while character_moving == true
-        advance_frame_4(@character_top_left, 23, 25, 27, 29)
-        advance_frame_4(@character_top_right, 24, 26, 28, 30)
-        advance_frame_4(@character_bottom_left, 39, 41, 43, 45)
-        advance_frame_4(@character_bottom_right, 40, 42, 44, 46)
-        waitms(100)
+    '     advance_frame_4(@character_top_left, 1, 5, 9, 13)
+    '     advance_frame_4(@character_top_right, 2, 6, 10, 14)
+    '     advance_frame_4(@character_bottom_left, 3, 7, 11, 15)
+    '     advance_frame_4(@character_bottom_right, 4, 8, 12, 16)
+    '     waitms(300)
 
 pub advance_frame_4(sprite_ptr, val_1, val_2, val_3, val_4)
     case long[sprite_ptr]
@@ -285,6 +277,23 @@ pub advance_frame_4(sprite_ptr, val_1, val_2, val_3, val_4)
         val_2: long[sprite_ptr] := val_3
         val_3: long[sprite_ptr] := val_4
         val_4: long[sprite_ptr] := val_1
+
+pub advance_frame_2(sprite_ptr, val_1, val_2)
+    case long[sprite_ptr]
+        val_1: long[sprite_ptr] := val_2
+        val_2: long[sprite_ptr] := val_1
+
+pub trigger_running_animation()
+    character_top_left := 20
+    character_top_right := 21
+    character_bottom_left := 22
+    character_bottom_right := 23
+    repeat while character_moving == true
+        advance_frame_4(@character_top_left, 20, 24, 28, 32)
+        advance_frame_4(@character_top_right, 21, 25, 29, 33)
+        advance_frame_4(@character_bottom_left, 22, 26, 30, 34)
+        advance_frame_4(@character_bottom_right, 23, 27, 31, 35)
+        waitms(100)
 
 pub advance_frame_5(sprite_ptr, val_1, val_2, val_3, val_4, val_5)
     case long[sprite_ptr]
@@ -294,11 +303,6 @@ pub advance_frame_5(sprite_ptr, val_1, val_2, val_3, val_4, val_5)
         val_4: long[sprite_ptr] := val_5
         val_5: long[sprite_ptr] := val_1
 
-
-pub advance_frame_2(sprite_ptr, val_1, val_2)
-    case long[sprite_ptr]
-        val_1: long[sprite_ptr] := val_2
-        val_2: long[sprite_ptr] := val_1
 
 
 
