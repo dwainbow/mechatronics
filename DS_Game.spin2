@@ -68,10 +68,10 @@ pub video_game() | i
         if is_button_pressed("A")
             character_hitting := true
             character_animation_state := 2
-        elseif is_button_pressed("X") and character_jumping == false
+        elseif is_button_pressed("B")
             character_jumping := true
             character_animation_state := 3
-        elseif (L_JOY_X < 45 or L_JOY_X > 55) or (L_JOY_Y < 45 or L_JOY_Y > 55)
+        elseif (L_JOY_X < 45 or L_JOY_X > 55)
             character_moving := true
             character_animation_state := 1
             if L_JOY_X < 45
@@ -95,11 +95,6 @@ pub video_game() | i
         else
             draw_character(character_top_right, character_top_left, character_bottom_right, character_bottom_left)
 
-        ' Note we will handle jumping later
-        ' if is_button_pressed("B")
-        '     character_jumping := true
-        ' else
-        '     character_jumping := false
 
         if data[6].[4] == 0
             pause_game()
@@ -134,10 +129,17 @@ pub debug_display()
                 debug(`term1 'A button IS Pressed',10)
             else
                 debug(`term1 'A button NOT Pressed',10)
+
             if data[7].[2] == 0
                 debug(`term1 'Right Z button IS Pressed',10)
             else
                 debug(`term1 'Right Z button NOT Pressed',10)
+
+            if is_button_pressed("X")
+                debug(`term1 'X button IS Pressed',10)
+            else
+                debug(`term1 'X button NOT Pressed',10)
+
             if collision == true
                 debug(`term1 'Collision Detected!')
             else
@@ -148,11 +150,11 @@ pub is_button_pressed(button) : boolean
     case button
         "A":
             return data[7].[4] == 0
-        "B":
-            return data[7].[5] == 0
-        "X":
-            return data[7].[6] == 0
         "Y":
+            return data[7].[5] == 0
+        "B":
+            return data[7].[6] == 0
+        "B":
             return data[7].[7] == 0
         "Z":
             return data[7].[2] == 0
@@ -179,12 +181,14 @@ pub debug_character_motion()
             debug(`term2 'Bottom Right Sprite = `(character_bottom_right)',10)
             debug(`term2 'Rotation (0=R,1=L)  = `(character_rotation)',10)
 
-            ' if character_hitting == true
-            '     debug(`term2 'Status: HITTING animation active',10)
-            ' elseif character_moving == true
-            '     debug(`term2 'Status: RUNNING animation active',10)
-            ' else
-            '     debug(`term2 'Status: STANDING animation active',10)
+            if character_hitting == true
+                debug(`term2 'Status: HITTING animation active',10)
+            elseif character_moving == true
+                debug(`term2 'Status: RUNNING animation active',10)
+            elseif character_jumping == true
+                debug(`term2 'Status: JUMPING animation active',10)
+            else
+                debug(`term2 'Status: STANDING animation active',10)
 
             display_delay := getct() + clkfreq / 4
 pub character_motion()
@@ -206,57 +210,41 @@ pub trigger_hit_animation()
     character_bottom_right := 53
 
     repeat 4
-        advance_frame_2(@character_top_left,50, 54)
-        advance_frame_2(@character_top_right, 51, 55)
-
-        character_top_left :=0
-        character_top_right := 0
-        advance_frame_4(@character_bottom_left, 52, 56, 59, 61)
-        advance_frame_4(@character_bottom_right, 53, 57, 60, 62)
-        waitms(300)
+        advance_frame_4(@character_top_left,50, 54, 58, 62)
+        advance_frame_4(@character_top_right, 51, 55, 59, 63)
+        advance_frame_4(@character_bottom_left, 52, 56, 60, 64)
+        advance_frame_4(@character_bottom_right, 53, 57, 61, 65)
+        waitms(200)
     character_hitting:=false
     character_animation_state := 0
 
 pub trigger_jumping_animation()
-    character_top_left := 30
-    character_top_right := 31
-    character_bottom_left := 32
-    character_bottom_right := 33
+    character_top_left := 70
+    character_top_right := 71
+    character_bottom_left := 72
+    character_bottom_right := 73
 
-    advance_frame_4(@character_top_left, 30, 34, 38, 42)
-    advance_frame_4(@character_top_right, 31, 35, 39, 43)
-    advance_frame_4(@character_bottom_left, 32, 36, 40, 44)
-    advance_frame_4(@character_bottom_right, 33, 37, 41, 45)
-    jump_help:=100
-    repeat while character[y] < 400
-        if jump_help< 0
-            jump_help := 0
+    advance_frame_4(@character_top_left, 70, 74, 78, 82)
+    advance_frame_4(@character_top_right, 71, 75, 79, 83)
+    advance_frame_4(@character_bottom_left, 72, 76, 80, 84)
+    advance_frame_4(@character_bottom_right, 73, 77, 81, 85)
+
+    jump_help:= 25
+    repeat while character[y] < 300
         character[y] := character[y] + jump_help
-        jump_help := jump_help - 10
 
-    repeat while character_jumping and character[y] > starting_y
-        ' advance_frame_2(@character_top_left, 100, 102)
-        ' advance_frame_2(@character_top_right, 101, 103)
-        ' advance_frame_2(@character_bottom_left, 116, 118)
-        ' advance_frame_2(@character_bottom_right, 117, 119)
-
-        if character[y] <= starting_y
-            character_jumping := false
-            quit
-
-        if gravity > 10
-            gravity := 10
+    waitms(200)
+    gravity := 5
+    repeat while character[y] > starting_y
         character[y] := character[y] - gravity
-
-        gravity := gravity + 2
+        gravity := gravity + 5
         waitms(100)
 
-    if character[y] <= starting_y
+    if character[y] < starting_y
         character[y] := starting_y
 
     character_jumping := false
     character_animation_state := 0
-
     waitms(100)
 
 pub trigger_standing_animation()
@@ -277,6 +265,7 @@ pub advance_frame_4(sprite_ptr, val_1, val_2, val_3, val_4)
         val_2: long[sprite_ptr] := val_3
         val_3: long[sprite_ptr] := val_4
         val_4: long[sprite_ptr] := val_1
+    
 
 pub advance_frame_2(sprite_ptr, val_1, val_2)
     case long[sprite_ptr]
@@ -358,7 +347,6 @@ pub draw_background() | i, j
 
 
 ' The character has 4 sprite images, 2 for the top and 2 for the bottom'
-' Note the legs seem to be flipped for some reason?? will fix
 pub draw_character(top_left,top_right,bottom_left,bottom_right)
     debug(`screen set (`(character[x]), `(character[y])) sprite (`(top_left), `(character_rotation), 2, `(character_opacity)))
     debug(`screen set (`(character[x] + 64), `(character[y])) sprite (`(top_right), `(character_rotation), 2, `(character_opacity)))
