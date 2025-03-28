@@ -14,12 +14,16 @@ obj
 var
     long character_motion_triggered
     byte data[8]
+    byte enemies[5]
     long character[4], enemy[4]
     long starting_x, starting_y
+    long round_num
+    long enemy_count, enemies_alive
     long gravity, jump_help
     long L_JOY_X, L_JOY_Y, collision, easter_egg
     long character_top_left, character_top_right, character_bottom_left, character_bottom_right, character_rotation, character_opacity
     long character_hitting, character_jumping,  character_moving, character_animation_state
+    long enemy_top_left, enemy_top_right, enemy_bottom_left, enemy_bottom_right
     long frame_rate, frame_rate_wait_time, start_time, raw_loop_time, loop_time, display_delay
     long stack_0[100], stack_1[100], stack_2[100], stack_3[100], stack_4[100], stack_5[100], stack_6[100], stack_7[100]
 
@@ -34,6 +38,7 @@ pub video_game() | i
 
 
     ' starting postion of the character
+    round_num :=1 
     starting_x := 80
     starting_y := 176
 
@@ -199,9 +204,24 @@ pub character_motion()
             2: trigger_hit_animation()
             3: trigger_jumping_animation()
 
+pub enemy_motion()
+    repeat
+        case enemey_animation_state
+            0: trigger_enemy_walking_animation()
 
 
 
+pub trigger_enemy_walking_animation()
+' This simulates walking 
+    enemy_top_left := 80
+    enemy_top_right := 81
+    enemy_bottom_left := 82
+    enemy_bottom_right := 83
+
+    advance_frame_4(@enemy_top_left, 80, 84, 88, 92)
+    advance_frame_4(@enemy_top_right, 81, 85, 89, 93)
+    advance_frame_4(@enemy_bottom_left, 82, 86, 90, 94)
+    advance_frame_4(@enemy_bottom_right, 83, 87, 91, 95)
 
 pub trigger_hit_animation()
     character_top_left := 50
@@ -388,3 +408,7 @@ pub read_controller() | i
         data[i] := i2c.read(0)
     data[7] := i2c.read(1)
     i2c.stop()
+
+
+' SO I want to be able to spawn in enemies. I have an array of enemies[5] which is the max number of enemies/rounds 
+' Every round we spawn in i enemeies, when I spawn an enemy, I need the reference of the enemy to be stored in the enemies array
