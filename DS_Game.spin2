@@ -8,7 +8,6 @@ con _clkfreq = 300_000_000
 
 obj
     sprites : "DS_Sprites"
-    ' sprites: "standing_sprites"
     i2c     : "jm_i2c"
 
 CON
@@ -33,9 +32,6 @@ var
 
     ' Enemy-related variables
     long enemies[40]  ' 5 enemies * 5 parameters each
-    long enemy[4]  ' x, y, width, height
-    long enemy_top_left, enemy_top_right, enemy_bottom_left, enemy_bottom_right
-    long enemy_animation_state
     long enemy_count, enemies_alive
 
     ' Controller-related variables
@@ -213,24 +209,14 @@ pub debug_character_motion()
 
 
 
-' TODO: Fix this 
 pub spawn_enemies() | i, base
     repeat i from 0 to round_num - 1
         base := i * ENEMY_SIZE
-        ' cogspin(i+1, enemy_motion(), @stack_1 + ((i) * 100)) 'Start from stack0 and add the adress to launch the cogs of the enemies
-        enemies[base + ENEMY_ACTIVE] := 1
-        enemies[base + ENEMY_X] := 50 + i * 60    ' space out horizontally we might have to add clamping
-        enemies[base + ENEMY_Y] := 176 'The base floor
-        enemies[base + ENEMY_HP] := 1
+        init_enemy(@base)
+        draw_enemy(@base)
+        
 
-        ' enemy_top_left:= enemeies[base + ENEMY_TOP_LEFT_SPRITE]
-        ' enemy_top_right:= enemies[base + ENEMY_TOP_RIGHT_SPRITE]
-        ' enemy_bottom_left:= enemies[base + ENEMY_BOTTOM_LEFT_SPRITE]
-        ' enemy_bottom_right:= enemies[base + ENEMY_BOTTOM_RIGHT_SPRITE]
-
-        ' draw_character(enemy_top_left, enemy_top_right, enemy_bottom_left, enemy_bottom_right)
-        draw_character(enemies[base + ENEMY_TOP_LEFT_SPRITE], enemies[base + ENEMY_TOP_RIGHT_SPRITE], enemies[base + ENEMY_BOTTOM_LEFT_SPRITE], enemies[base + ENEMY_BOTTOM_RIGHT_SPRITE])
-
+' TODO: #2 Fix the draw enemies function
 pub draw_enemies() | i,base,enemy_rot
     repeat i from 0 to enemy_count - 1
         base := i * ENEMY_SIZE
@@ -238,22 +224,26 @@ pub draw_enemies() | i,base,enemy_rot
 
             enemy_rot := enemies[base + ENEMY_ROTATION]
             enemies[base + ENEMY_X] :=  enemies[base + ENEMY_X] +50
-            if enemies[base + ENEMY_X] > 384 'I think this is the limit of the screen
+            if enemies[base + ENEMY_X] > 640 'I think this is the limit of the screen
                 enemies[base + ENEMY_X] := 0
                 enemies[base + ENEMY_ROTATION] := 1 - enemy_rot 'Invert the rotation
-
-
-            enemy_top_left := enemies[base + ENEMY_TOP_LEFT_SPRITE]
-            enemy_top_right := enemies[base + ENEMY_TOP_RIGHT_SPRITE]
-            enemy_bottom_left := enemies[base + ENEMY_BOTTOM_LEFT_SPRITE]
-            enemy_bottom_right := enemies[base + ENEMY_BOTTOM_RIGHT_SPRITE]
 
             if enemies[base + ENEMY_ROTATION] == 0
                 draw_character(enemy_top_left, enemy_top_right, enemy_bottom_left, enemy_bottom_right)
             else
                 draw_character(enemy_top_right, enemy_top_left, enemy_bottom_right, enemy_bottom_left)
 
+pub init_enemy(enemy_reference) | i
+    enemies[enemy_reference + ENEMY_TOP_LEFT_SPRITE] := 80
+    enemies[enemy_reference + ENEMY_TOP_RIGHT_SPRITE] := 81
+    enemies[enemy_reference + ENEMY_BOTTOM_LEFT_SPRITE] := 82
+    enemies[enemy_reference + ENEMY_BOTTOM_RIGHT_SPRITE] := 83
+    enemies[enemy_reference + ENEMY_X] := 0
+    enemies[enemy_reference + ENEMY_Y] := 176
+    enemies[enemy_reference + ENEMY_ROTATION] := 0
+    enemies[enemy_reference + ENEMY_HP] := 1
 
+    'TODO: #1 Implement Cogs for the enemies 
 
 pub character_motion()
     repeat
@@ -263,20 +253,23 @@ pub character_motion()
             2: trigger_hit_animation()
             3: trigger_jumping_animation()
 
-pub enemy_motion()
+pub enemy_motion(enemy_reference)
     repeat
         case enemy_animation_state
-            0: trigger_enemy_animation()
+            0: trigger_enemy_animation(@enemey_reference)
 
 
-
-pub trigger_enemy_animation()
-' This simulates walking
-    enemy_top_left := 80
-    enemy_top_right := 81
-    enemy_bottom_left := 82
-    enemy_bottom_right := 83
-
+pub trigger_enemy_animation(enemy_reference) | enemy_top_left, enemy_top_right, enemy_bottom_left, enemy_bottom_right
+    enemies[enemy_reference + ENEMY_TOP_LEFT_SPRITE] := 80
+    enemies[enemy_reference + ENEMY_TOP_RIGHT_SPRITE] := 81
+    enemies[enemy_reference + ENEMY_BOTTOM_LEFT_SPRITE] := 82
+    enemies[enemy_reference + ENEMY_BOTTOM_RIGHT_SPRITE] := 83
+    
+    enemy_top_left := enemies[enemy_reference + ENEMY_TOP_LEFT_SPRITE]
+    enemy_top_right := enemies[enemy_reference + ENEMY_TOP_RIGHT_SPRITE]
+    enemy_bottom_left := enemies[enemy_reference + ENEMY_BOTTOM_LEFT_SPRITE]
+    enemy_bottom_right := enemies[enemy_reference + ENEMY_BOTTOM_RIGHT_SPRITE]
+    
     advance_frame_4(@enemy_top_left, 80, 84, 88, 92)
     advance_frame_4(@enemy_top_right, 81, 85, 89, 93)
     advance_frame_4(@enemy_bottom_left, 82, 86, 90, 94)
@@ -473,6 +466,24 @@ pub draw_character(top_left,top_right,bottom_left,bottom_right)
     debug(`screen set (`(character[x] + 64), `(character[y])) sprite (`(top_right), `(character_rotation), 2, `(character_opacity)))
     debug(`screen set (`(character[x]), `(character[y] - 64)) sprite (`(bottom_left), `(character_rotation), 2, `(character_opacity)))
     debug(`screen set (`(character[x] + 64), `(character[y] - 64)) sprite (`(bottom_right), `(character_rotation), 2, `(character_opacity)))
+
+pub draw_enemy(enemy_reference) | enemy_top_left, enemy_top_right, enemy_bottom_left, enemy_bottom_right, enemy_rotation, enemy_x, enemy_y
+
+    ' Configs for the enemy 
+    enemy_top_left := enemies[enemy_reference + ENEMY_TOP_LEFT_SPRITE]
+    enemy_top_right := enemies[enemy_reference + ENEMY_TOP_RIGHT_SPRITE]
+    enemy_bottom_left := enemies[enemy_reference + ENEMY_BOTTOM_LEFT_SPRITE]
+    enemy_bottom_right := enemies[enemy_reference + ENEMY_BOTTOM_RIGHT_SPRITE]
+    enemy_rotation := enemies[enemy_reference + ENEMY_ROTATION]
+    enemy_x := enemies[enemy_reference + ENEMY_X]
+    enemy_y := enemies[enemy_reference + ENEMY_Y]
+    enemy_opacity := 255
+
+    debug(`screen set (`(enemy_x), `(enemy_y)) sprite (`(enemy_top_left), `(enemy_rotation), 2, `(enemy_opacity)))
+    debug(`screen set (`(enemy_x + 64), `(enemy_y)) sprite (`(enemy_top_right), `(enemy_rotation), 2, `(enemy_opacity)))
+    debug(`screen set (`(enemy_x), `(enemy_y - 64)) sprite (`(enemy_bottom_left), `(enemy_rotation), 2, `(enemy_opacity)))
+    debug(`screen set (`(enemy_x + 64), `(enemy_y - 64)) sprite (`(enemy_bottom_right), `(enemy_rotation), 2, `(enemy_opacity)))
+
 con
 
 pub init_controller()
