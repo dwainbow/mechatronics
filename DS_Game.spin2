@@ -21,6 +21,7 @@ CON
     ENEMY_BOTTOM_LEFT_SPRITE  = 6
     ENEMY_BOTTOM_RIGHT_SPRITE  = 7
     ENEMY_ROTATION      = 8
+    ENEMY_SIZE = 9
 var
     ' Character-related variables
     long character_motion_triggered
@@ -31,8 +32,7 @@ var
     long starting_x, starting_y
 
     ' Enemy-related variables
-    byte enemies[8]  ' Temporary enemy data
-    long enemies[25]  ' 5 enemies * 5 parameters each
+    long enemies[40]  ' 5 enemies * 5 parameters each
     long enemy[4]  ' x, y, width, height
     long enemy_top_left, enemy_top_right, enemy_bottom_left, enemy_bottom_right
     long enemy_animation_state
@@ -52,7 +52,7 @@ var
     long start_time, raw_loop_time, loop_time, display_delay
 
     ' Stack memory for cogs
-    long stack_0[100], stack_1[100], stack_2[100], stack_3[100]
+    long stack_0[500], stack_1[100], stack_2[100], stack_3[100]
     long stack_4[100], stack_5[100], stack_6[100], stack_7[100]
 
 pub video_game() | i
@@ -63,11 +63,12 @@ pub video_game() | i
     sprites.load_sprites()
     ' define_collision_areas()
     ' easter_egg := false
-    round_num :=1 
+    round_num :=1
     init_character()
-    
+
     ' cogspin(2, debug_display(), @stack_2)
     ' cogspin(3,debug_character_motion(), @stack_3)
+
 
     repeat
         start_time := getct()
@@ -210,34 +211,38 @@ pub debug_character_motion()
 
             display_delay := getct() + clkfreq / 4
 
-pub spawn_enemies(round) | i, base, enemy_top_left, enemy_top_right, enemy_bottom_left, enemy_bottom_right
-    repeat i from 0 to round - 1
+
+
+' TODO: Fix this 
+pub spawn_enemies() | i, base
+    repeat i from 0 to round_num - 1
         base := i * ENEMY_SIZE
-        cogspin(i+1, enemy_motion(), @stack_0 + ((i+1) * 100)) 'Start from stack0 and add the adress to launch the cogs of the enemies 
+        ' cogspin(i+1, enemy_motion(), @stack_1 + ((i) * 100)) 'Start from stack0 and add the adress to launch the cogs of the enemies
         enemies[base + ENEMY_ACTIVE] := 1
         enemies[base + ENEMY_X] := 50 + i * 60    ' space out horizontally we might have to add clamping
-        enemies[base + ENEMY_Y] := 176 'The base floor 
+        enemies[base + ENEMY_Y] := 176 'The base floor
         enemies[base + ENEMY_HP] := 1
 
-        enemy_top_left:= enemeies[base + ENEMY_TOP_LEFT_SPRITE]
-        enemy_top_right:= enemies[base + ENEMY_TOP_RIGHT_SPRITE]
-        enemy_bottom_left:= enemies[base + ENEMY_BOTTOM_LEFT_SPRITE]
-        enemy_bottom_right:= enemies[base + ENEMY_BOTTOM_RIGHT_SPRITE]
+        ' enemy_top_left:= enemeies[base + ENEMY_TOP_LEFT_SPRITE]
+        ' enemy_top_right:= enemies[base + ENEMY_TOP_RIGHT_SPRITE]
+        ' enemy_bottom_left:= enemies[base + ENEMY_BOTTOM_LEFT_SPRITE]
+        ' enemy_bottom_right:= enemies[base + ENEMY_BOTTOM_RIGHT_SPRITE]
 
-        draw_character(enemy_top_left, enemy_top_right, enemy_bottom_left, enemy_bottom_right)
-        
-pub draw_enemies() | i, base, enemy_top_left, enemy_top_right, enemy_bottom_left, enemy_bottom_right
+        ' draw_character(enemy_top_left, enemy_top_right, enemy_bottom_left, enemy_bottom_right)
+        draw_character(enemies[base + ENEMY_TOP_LEFT_SPRITE], enemies[base + ENEMY_TOP_RIGHT_SPRITE], enemies[base + ENEMY_BOTTOM_LEFT_SPRITE], enemies[base + ENEMY_BOTTOM_RIGHT_SPRITE])
+
+pub draw_enemies() | i,base,enemy_rot
     repeat i from 0 to enemy_count - 1
         base := i * ENEMY_SIZE
         if enemies[base + ENEMY_ACTIVE] == 1
 
-            enemy_rotation = enemies[base + ENEMY_ROTATION]
+            enemy_rot := enemies[base + ENEMY_ROTATION]
             enemies[base + ENEMY_X] :=  enemies[base + ENEMY_X] +50
             if enemies[base + ENEMY_X] > 384 'I think this is the limit of the screen
                 enemies[base + ENEMY_X] := 0
-                enemies[base + ENEMY_ROTATION] := 1 - enemy_rotation 'Invert the rotation 
-            
-                
+                enemies[base + ENEMY_ROTATION] := 1 - enemy_rot 'Invert the rotation
+
+
             enemy_top_left := enemies[base + ENEMY_TOP_LEFT_SPRITE]
             enemy_top_right := enemies[base + ENEMY_TOP_RIGHT_SPRITE]
             enemy_bottom_left := enemies[base + ENEMY_BOTTOM_LEFT_SPRITE]
@@ -247,8 +252,8 @@ pub draw_enemies() | i, base, enemy_top_left, enemy_top_right, enemy_bottom_left
                 draw_character(enemy_top_left, enemy_top_right, enemy_bottom_left, enemy_bottom_right)
             else
                 draw_character(enemy_top_right, enemy_top_left, enemy_bottom_right, enemy_bottom_left)
-            
-        
+
+
 
 pub character_motion()
     repeat
@@ -261,12 +266,12 @@ pub character_motion()
 pub enemy_motion()
     repeat
         case enemy_animation_state
-            0: trigger_enemy_walking_animation()
+            0: trigger_enemy_animation()
 
 
 
-pub trigger_enemy_walking_animation()
-' This simulates walking 
+pub trigger_enemy_animation()
+' This simulates walking
     enemy_top_left := 80
     enemy_top_right := 81
     enemy_bottom_left := 82
@@ -339,7 +344,7 @@ pub advance_frame_4(sprite_ptr, val_1, val_2, val_3, val_4)
         val_2: long[sprite_ptr] := val_3
         val_3: long[sprite_ptr] := val_4
         val_4: long[sprite_ptr] := val_1
-    
+
 
 pub advance_frame_2(sprite_ptr, val_1, val_2)
     case long[sprite_ptr]
@@ -373,7 +378,7 @@ pub init_character()
 
     character[x] := starting_x
     character[y] := starting_y
-    
+
     character_top_left := 1
     character_top_right := 2
     character_bottom_left := 3
@@ -431,8 +436,35 @@ pub pause_game()
         read_controller()
     start_time := getct()
 
-pub draw_background() | i, j
-    debug(`screen set 384 352 color $743685 box 768 574)
+pub draw_background() | r,c,i k
+    ' Draw the floors 
+
+    repeat i from 0 to 704 step 64
+        debug(`screen set `(i) 50 sprite (200, 0, 2))
+
+    k := 0 'This is for the background
+    repeat r from 740 to 228 step -64
+        repeat c from 0 to 704 step 64
+            debug(`screen set `(c) `(r) sprite (`(ds_mini_bg_tiles[k],0,4)))
+            k++
+
+    
+    
+
+
+pub get_matrix_element(address, row,column) : element
+    element := byte[address + (row-1)*5+(column-1)]
+  
+
+dat ds_mini_bg_tiles byte {
+}300,	301,	302,	303,	304,	{
+}305,	306,	307,	308,	309,	{
+}310,	311,	312,	313,	314,	{
+}315,	316,	317,	318,	319,	{
+}320,	321,	322,	323,	324,	{
+}325,	326,	327,	328,	329
+
+
 
 
 ' The character has 4 sprite images, 2 for the top and 2 for the bottom'
@@ -479,5 +511,5 @@ pub read_controller() | i
     i2c.stop()
 
 
-' SO I want to be able to spawn in enemies. I have an array of enemies[5] which is the max number of enemies/rounds 
+' SO I want to be able to spawn in enemies. I have an array of enemies[5] which is the max number of enemies/rounds
 ' Every round we spawn in i enemeies, when I spawn an enemy, I need the reference of the enemy to be stored in the enemies array
