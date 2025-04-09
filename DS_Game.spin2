@@ -2,26 +2,66 @@
 con _clkfreq = 300_000_000
 
     R_JOY_X_MIN=4, R_JOY_X_MAX=252, R_JOY_Y_MIN=4, R_JOY_Y_MAX=252, L_JOY_X_MIN=2, L_JOY_X_MAX=254, L_JOY_Y_MIN=4, L_JOY_Y_MAX=252
-    #0, x, y, width, height
+    #0, x, y
     frame_time=75
-    collision_debug_mode=false
+    collision_debug_mode=true
 
 obj
     sprites : "DS_Sprites"
-    ' sprites: "standing_sprites"
     i2c     : "jm_i2c"
 
+CON
+    ENEMY_ACTIVE     = 0
+    ENEMY_X          = 1
+    ENEMY_Y          = 2
+    ENEMY_HP         = 3
+    ENEMY_TOP_LEFT_SPRITE = 4
+    ENEMY_TOP_RIGHT_SPRITE   = 5
+    ENEMY_BOTTOM_LEFT_SPRITE  = 6
+    ENEMY_BOTTOM_RIGHT_SPRITE  = 7
+    ENEMY_ROTATION      = 8
+    ENEMY_SEEN = 9
+    ENEMY_OP = 10
+    ENEMY_ID = 11
+
+    MAX_ENEMIES = 5
+    ENEMY_SIZE = 12
 var
+    ' Character-related variables
     long character_motion_triggered
-    byte data[8]
-    long character[4], enemy[4]
+    long character[2]
+    long character_top_left, character_top_right, character_bottom_left, character_bottom_right
+    long character_rotation, character_opacity
+    long character_hitting, character_jumping, character_moving, character_animation_state
     long starting_x, starting_y
+    long character_hp
+
+    ' Enemy-related variables
+    long enemies[MAX_ENEMIES*ENEMY_SIZE]  ' 5 enemies * 10 parameters each
+    long enemy_count, enemies_alive
+    long enemy_stacks[MAX_ENEMIES*500]  ' one 100-long stack per enemy
+
+
+    ' Controller-related variables
+    byte data[8]
+    long L_JOY_X, L_JOY_Y
+
+    ' Game-related variables
+    long round_num
     long gravity, jump_help
-    long L_JOY_X, L_JOY_Y, collision, easter_egg
-    long character_top_left, character_top_right, character_bottom_left, character_bottom_right, character_rotation, character_opacity
-    long character_hitting, character_jumping,  character_moving, character_animation_state
-    long frame_rate, frame_rate_wait_time, start_time, raw_loop_time, loop_time, display_delay
-    long stack_0[100], stack_1[100], stack_2[100], stack_3[100], stack_4[100], stack_5[100], stack_6[100], stack_7[100]
+    long collision_state, easter_egg
+
+    ' Timing-related variables
+    long frame_rate, frame_rate_wait_time
+    long start_time, raw_loop_time, loop_time, display_delay
+
+    ' Stack memory for cogs
+    long stack_0[500], stack_1[500], stack_2[500], stack_3[500]
+    long stack_4[500], stack_5[500], stack_6[500], stack_7[500]
+
+    long round_started
+
+    long player_score
 
 pub video_game() | i
     debug(`plot screen pos 100 0 size 768 640 backcolor black update)
@@ -31,81 +71,117 @@ pub video_game() | i
     sprites.load_sprites()
     ' define_collision_areas()
     ' easter_egg := false
-
-
-    ' starting postion of the character
-    starting_x := 80
-    starting_y := 176
-
-    character[x] := starting_x
-    character[y] := starting_y
-    character_opacity:=255
-    character_animation_state:= 0
-
-    character_top_left := 1
-    character_top_right := 2
-    character_bottom_left := 3
-    character_bottom_right := 4
-
-    cogspin(1, character_motion(), @stack_1)
-    cogspin(7, debug_display(), @stack_7)
-    cogspin(6,debug_character_motion(), @stack_6)
-
+    round_num :=1
+    init_character()
+    ' cogspin(2, debug_display(), @stack_2)
+    ' cogspin(3,debug_character_motion(), @stack_3)
+    cogspin(4, debug_enemy(), @stack_4)
     repeat
         start_time := getct()
         debug(`screen clear)
         draw_background()
+        if round_started == false
+            start_round()
         read_controller()
-
-        ' Clamping logic
-        L_JOY_X := 0 #> (data[0] - L_JOY_X_MIN) * 100 / (L_JOY_X_MAX - L_JOY_X_MIN) <# 100
-        L_JOY_Y := 0 #> (data[2] - L_JOY_Y_MIN) * 100 / (L_JOY_Y_MAX - L_JOY_Y_MIN) <# 100
-
-        ' if L_JOY_X ==100
-        '     L_JOY_X := 50
-        '     character_animation_state := 0
+        clamp_joysticks()
+        ' if character_rotation == 0
+        '     draw_character(character_top_left, character_top_right, character_bottom_left, character_bottom_right)
+        ' else
+        '     draw_character(character_top_right, character_top_left, character_bottom_right, character_bottom_left)
+        draw_enemies()
+        check_animation_state()
+        move_character()
+        ' check_collisions_with_enemies()
+        check_win_status()
+        ' if enemies_alive == 0
+        '     advance_round()
 
         if is_button_pressed("A")
-            character_hitting := true
-            character_animation_state := 2
-        elseif is_button_pressed("B")
-            character_jumping := true
-            character_animation_state := 3
-        elseif (L_JOY_X < 45 or L_JOY_X > 55)
-            character_moving := true
-            character_animation_state := 1
-            if L_JOY_X < 45
-                character_rotation := 1
-            else
-                character_rotation := 0
-        else
-            character_moving := false
-            character_animation_state := 0
-
-        case_fast L_JOY_X
-            0..20  : character[x] := 0 #> character[x] - 16 <# 740
-            21..30  : character[x] := 0 #> character[x] - 8 <# 740
-            31..40  : character[x] := 0 #> character[x] - 4 <# 740
-            61..70  : character[x] := 0 #> character[x] + 4 <# 740
-            71..80  : character[x] := 0 #> character[x] + 8 <# 740
-            81..100 : character[x] := 0 #> character[x] + 16 <# 740
-
-        if character_rotation == 0
-            draw_character(character_top_left, character_top_right, character_bottom_left, character_bottom_right)
-        else
-            draw_character(character_top_right, character_top_left, character_bottom_right, character_bottom_left)
-
-
-        if data[6].[4] == 0
+            advance_round()
+        if is_button_pressed("P")
             pause_game()
+        adjust_frame_rate()
 
-        frame_rate := frame_time * 300_000 - abs(start_time - getct())
-        if frame_rate <= 0
-            debug(`screen set 384 600 red text 20 'Frame loop took longer than 100ms!!!')
-        waitct(frame_rate + getct())
-        debug(`screen update)
-        raw_loop_time := abs(start_time - getct())
+' TODO: Make a health bar
+pub display_health_bar()| i
+    ' repeat i from 0 to 2
+    '     if i < character_hp
+    '         debug(`screen set `(50 + i * 22) 600) green box `(68 + i * 22) 620)  ' Full block
+    '     else
+    '         debug(`screen set `(50 + i * 22) 600) red box `(68 + i * 22) 620)   ' Empty block
 
+pub display_score()
+    debug(`screen set 700 620 red text 20 'Score: `(player_score))
+
+pub start_round()
+    debug(`screen set 400 330 red text 50 'Round `(round_num))
+    debug(`screen update `dly(1000))
+    waitms(2000)
+    spawn_enemies()
+    waitms(100)
+    round_started := true
+
+pub advance_round()
+    if round_num <= MAX_ENEMIES
+        round_num++
+        round_started := false
+
+pub check_win_status()
+    if round_num >=5 && enemies_alive ==0
+        repeat until is_button_pressed("A")
+            debug(`screen set 400 330 red text 30 'You Win! Press A to Restart')
+            debug(`screen update `dly(1000))
+        restart_game()
+
+pub restart_game()
+    round_num := 1
+    enemies_alive := 0
+    round_started := false
+    character[x] := starting_x
+    character[y] := starting_y
+
+
+pub adjust_frame_rate()
+    frame_rate := frame_time * 300_000 - abs(start_time - getct())
+    if frame_rate <= 0
+        debug(`screen set 384 600 red text 20 'Frame loop took longer than 100ms!!!')
+    waitct(frame_rate + getct())
+    debug(`screen update)
+    raw_loop_time := abs(start_time - getct())
+
+pub move_character()
+    case_fast L_JOY_X
+        0..20  : character[x] := 0 #> character[x] - 16 <# 740
+        21..30  : character[x] := 0 #> character[x] - 8 <# 740
+        31..40  : character[x] := 0 #> character[x] - 4 <# 740
+        61..70  : character[x] := 0 #> character[x] + 4 <# 740
+        71..80  : character[x] := 0 #> character[x] + 8 <# 740
+        81..100 : character[x] := 0 #> character[x] + 16 <# 740
+
+pub debug_enemy()| i,base
+    debug(`term term3 pos 1150 300 size 32 12 textsize 18 color green)
+    display_delay := clkfreq / 4 + getct()
+
+    repeat
+        if pollct(display_delay)
+            debug(`term3 clear)
+            debug(`term3 '--- Enemy Debug ---',10)
+            repeat i from 0 to round_num-1
+                base := i * ENEMY_SIZE
+                debug(`term3 'Enemy `(i)',10)
+                debug(`term3 'Active         = `(enemies[base + ENEMY_ACTIVE])',10)
+                debug(`term3 'X Position     = `(enemies[base + ENEMY_X])',10)
+                debug(`term3 'Y Position     = `(enemies[base + ENEMY_Y])',10)
+                debug(`term3 'HP             = `(enemies[base + ENEMY_HP])',10)
+                debug(`term3 'Rotation       = `(enemies[base + ENEMY_ROTATION])',10)
+                debug(`term3 'Seen           = `(enemies[base + ENEMY_SEEN])',10)
+                debug(`term3 'Top Left Sprite     = `(enemies[base + ENEMY_TOP_LEFT_SPRITE])',10)
+                debug(`term3 'Top Right Sprite    = `(enemies[base + ENEMY_TOP_RIGHT_SPRITE])',10)
+                debug(`term3 'Bottom Left Sprite  = `(enemies[base + ENEMY_BOTTOM_LEFT_SPRITE])',10)
+                debug(`term3 'Bottom Right Sprite = `(enemies[base + ENEMY_BOTTOM_RIGHT_SPRITE])',10)
+                debug(`term3 '-----------------------------',10)
+
+            display_delay := getct() + clkfreq / 4
 pub debug_display()
     debug(`term term1 pos 867 0 size 28 12 textsize 18 color cyan)
     display_delay := clkfreq / 5 + getct()
@@ -140,11 +216,12 @@ pub debug_display()
             else
                 debug(`term1 'X button NOT Pressed',10)
 
-            if collision == true
-                debug(`term1 'Collision Detected!')
+            if is_button_pressed("P")
+                debug(`term1 'Select button IS Pressed',10)
             else
-                debug(`term1 'All Clear')
-            display_delay := display_delay + clkfreq / 5
+                debug(`term1 'Select button NOT Pressed',10)
+
+
 
 pub is_button_pressed(button) : boolean
     case button
@@ -154,13 +231,11 @@ pub is_button_pressed(button) : boolean
             return data[7].[5] == 0
         "B":
             return data[7].[6] == 0
-        "B":
-            return data[7].[7] == 0
         "Z":
             return data[7].[2] == 0
-        "Start":
+        "P": ''THis is the select button
             return data[6].[4] == 0
-        "Select":
+        "S": ''This is the start button
             return data[6].[5] == 0
         other:
             return false
@@ -191,6 +266,55 @@ pub debug_character_motion()
                 debug(`term2 'Status: STANDING animation active',10)
 
             display_delay := getct() + clkfreq / 4
+
+pub check_lose_status()
+    if character_hp <= 0
+        repeat until is_button_pressed("A")
+            debug(`screen set 400 330 red text 30 'You Lose! Press A to Restart')
+            debug(`screen update `dly(1000))
+        restart_game()
+pub spawn_enemies() | i, base,result
+    repeat i from 0 to round_num-1
+        base := i * ENEMY_SIZE
+        init_enemy(base)
+        cogspin(i + 2, enemy_motion(base), @enemy_stacks[i * 500])
+        waitms(100)
+
+pub despawn_enemy(base)
+    enemies[base + ENEMY_ACTIVE] := false
+    enemies[base + ENEMY_OP]:=0
+    enemies_alive--
+    cogstop(base / ENEMY_SIZE + 2)
+pub draw_enemies() | i,base,enemy_rot
+    repeat i from 0 to round_num-1
+        base := i * ENEMY_SIZE
+        if enemies[base + ENEMY_ACTIVE]
+            draw_enemy(base)
+
+pub init_enemy(enemy_reference)
+
+    enemies[enemy_reference + ENEMY_TOP_LEFT_SPRITE] := 80
+    enemies[enemy_reference + ENEMY_TOP_RIGHT_SPRITE] := 81
+    enemies[enemy_reference + ENEMY_BOTTOM_LEFT_SPRITE] := 82
+    enemies[enemy_reference + ENEMY_BOTTOM_RIGHT_SPRITE] := 83
+    enemies[enemy_reference + ENEMY_X] := 100 + (enemy_reference / ENEMY_SIZE) * 100
+    enemies[enemy_reference + ENEMY_Y] := 176
+    enemies[enemy_reference + ENEMY_ROTATION] := 0
+    enemies[enemy_reference + ENEMY_HP] := 1
+    enemies[enemy_reference + ENEMY_SEEN] := false
+    enemies[enemy_reference + ENEMY_ACTIVE] := true
+    enemies[enemy_reference + ENEMY_OP] := 255
+    enemies_alive++
+
+pub handle_enemy_movement(enemy_reference)
+    if enemies[enemy_reference + ENEMY_X] > 640
+        enemies[enemy_reference + ENEMY_X] := 640
+        enemies[enemy_reference + ENEMY_ROTATION] :=1
+    if enemies[enemy_reference + ENEMY_X] < 0
+        enemies[enemy_reference + ENEMY_X] := 0
+        enemies[enemy_reference + ENEMY_ROTATION] :=0
+
+
 pub character_motion()
     repeat
         case character_animation_state
@@ -199,7 +323,25 @@ pub character_motion()
             2: trigger_hit_animation()
             3: trigger_jumping_animation()
 
+pub enemy_motion(enemy_reference)
+    repeat
+        trigger_enemy_animation(enemy_reference)
+        handle_enemy_movement(enemy_reference)
+        move_enemy(enemy_reference)
+        waitms(20)
 
+pub move_enemy(enemy_reference)
+    if enemies[enemy_reference + ENEMY_ROTATION] == 0
+        enemies[enemy_reference + ENEMY_X] := enemies[enemy_reference + ENEMY_X] + 1
+    else
+        enemies[enemy_reference + ENEMY_X] := enemies[enemy_reference + ENEMY_X] - 1
+pub trigger_enemy_animation(enemy_reference)
+    advance_frame_3(@enemies[enemy_reference + ENEMY_TOP_LEFT_SPRITE], 80, 84, 88)
+    advance_frame_3(@enemies[enemy_reference + ENEMY_TOP_RIGHT_SPRITE], 81, 85, 89)
+    advance_frame_3(@enemies[enemy_reference + ENEMY_BOTTOM_LEFT_SPRITE], 82, 86, 90)
+    advance_frame_3(@enemies[enemy_reference + ENEMY_BOTTOM_RIGHT_SPRITE], 83, 87, 91)
+
+    ' waitms(50)
 
 
 
@@ -229,6 +371,12 @@ pub trigger_jumping_animation()
     advance_frame_4(@character_bottom_left, 72, 76, 80, 84)
     advance_frame_4(@character_bottom_right, 73, 77, 81, 85)
 
+    handle_gravity()
+    character_jumping := false
+    character_animation_state := 0
+    waitms(100)
+
+pub handle_gravity()
     jump_help:= 25
     repeat while character[y] < 300
         character[y] := character[y] + jump_help
@@ -243,21 +391,13 @@ pub trigger_jumping_animation()
     if character[y] < starting_y
         character[y] := starting_y
 
-    character_jumping := false
-    character_animation_state := 0
-    waitms(100)
 
 pub trigger_standing_animation()
     character_top_left := 1
     character_top_right := 2
     character_bottom_left := 3
     character_bottom_right := 4
-    ' repeat while character_moving == false
-    '     advance_frame_4(@character_top_left, 1, 5, 9, 13)
-    '     advance_frame_4(@character_top_right, 2, 6, 10, 14)
-    '     advance_frame_4(@character_bottom_left, 3, 7, 11, 15)
-    '     advance_frame_4(@character_bottom_right, 4, 8, 12, 16)
-    '     waitms(300)
+
 
 pub advance_frame_4(sprite_ptr, val_1, val_2, val_3, val_4)
     case long[sprite_ptr]
@@ -265,12 +405,13 @@ pub advance_frame_4(sprite_ptr, val_1, val_2, val_3, val_4)
         val_2: long[sprite_ptr] := val_3
         val_3: long[sprite_ptr] := val_4
         val_4: long[sprite_ptr] := val_1
-    
 
-pub advance_frame_2(sprite_ptr, val_1, val_2)
+pub advance_frame_3(sprite_ptr, val_1, val_2, val_3)
     case long[sprite_ptr]
         val_1: long[sprite_ptr] := val_2
-        val_2: long[sprite_ptr] := val_1
+        val_2: long[sprite_ptr] := val_3
+        val_3: long[sprite_ptr] := val_1
+
 
 pub trigger_running_animation()
     character_top_left := 20
@@ -284,52 +425,51 @@ pub trigger_running_animation()
         advance_frame_4(@character_bottom_right, 23, 27, 31, 35)
         waitms(100)
 
-pub advance_frame_5(sprite_ptr, val_1, val_2, val_3, val_4, val_5)
-    case long[sprite_ptr]
-        val_1: long[sprite_ptr] := val_2
-        val_2: long[sprite_ptr] := val_3
-        val_3: long[sprite_ptr] := val_4
-        val_4: long[sprite_ptr] := val_5
-        val_5: long[sprite_ptr] := val_1
+pub init_character()
+    starting_x := 80
+    starting_y := 176
 
+    character[x] := starting_x
+    character[y] := starting_y
 
+    character_top_left := 1
+    character_top_right := 2
+    character_bottom_left := 3
+    character_bottom_right := 4
 
+    character_animation_state := 0
+    character_opacity := 255
+    character_hp := 3
 
-pub define_collision_areas()
-    character[x] := 100
-    character[y] := 128
-    character[width] := 32
-    character[height] := 64
+    cogspin(1, character_motion(), @stack_1)
 
-    enemy[0] := 800
-    enemy[1] := 96
-    enemy[2] := 32
-    enemy[3] := 32
+' pub check_collisions_with_enemies()| i, base, dx, dy, threshold
+'     ' collision_state := false
+'     threshold := 10 ' You can tweak this value for sensitivity
 
+'     repeat i from 0 to round_num-1
+'         base := i * ENEMY_SIZE
 
-pub check_collision(Box1address, Box2address) : CollisionState
-    CollisionState~
-    if long[Box1address] < (long[Box2address] + long[Box2address][2]) and {
-                        }(long[Box1address] + long[Box1address][2]) > long[Box2address] and {
-                                 } long[Box1address][1] > (long[Box2address][1] - long[Box2address][3]) and {
-                                            } (long[Box1address][1] - long[Box1address][3]) < (long[Box2address][1])
-        CollisionState := true
-    else
-        CollisionState := false
+'         ' Only check active enemies
+'         if enemies[base + ENEMY_ACTIVE] == true
+'             dx := abs(character[x] - enemies[base + ENEMY_X])
+'             dy := abs(character[y] - enemies[base + ENEMY_Y])
 
-    if collision_debug_mode == true
-        debug(`screen set `(long[Box1address]) `(long[Box1address][1]) red line `(long[Box1address] + long[Box1address][2])) `(long[Box1address][1]))
-        debug(`screen set `(long[Box1address] + long[Box1address][2])) `(long[Box1address][1])) red line `(long[Box1address] + long[Box1address][2])) `(long[Box1address][1] - long[Box1address][3]))
-        debug(`screen set `(long[Box1address] + long[Box1address][2])) `(long[Box1address][1] - long[Box1address][3])) red line `(long[Box1address])) `(long[Box1address][1] - long[Box1address][3]))
-        debug(`screen set `(long[Box1address])) `(long[Box1address][1] - long[Box1address][3])) red line `(long[Box1address]) `(long[Box1address][1]))
+'             if dx < threshold || dy < threshold
+'                 if character_hitting
+'                     despawn_enemy(base)
+'                     player_score += 1
+'                     ' collision_state:=true
+'                 else
+'                     toggle_character_opacity()
+'                 return
 
-        debug(`screen set `(long[Box2address]) `(long[Box2address][1]) red line `(long[Box2address] + long[Box2address][2])) `(long[Box2address][1]))
-        debug(`screen set `(long[Box2address] + long[Box2address][2])) `(long[Box2address][1])) red line `(long[Box2address] + long[Box2address][2])) `(long[Box2address][1] - long[Box2address][3]))
-        debug(`screen set `(long[Box2address] + long[Box2address][2])) `(long[Box2address][1] - long[Box2address][3])) red line `(long[Box2address])) `(long[Box2address][1] - long[Box2address][3]))
-        debug(`screen set `(long[Box2address])) `(long[Box2address][1] - long[Box2address][3])) red line `(long[Box2address]) `(long[Box2address][1]))
-
-        if CollisionState == true
-            debug(`screen set 400 330 red text 50 'Collision!!!')
+pub toggle_character_opacity()
+    character_opacity := 255 - character_opacity
+    waitms(300)
+pub clamp_joysticks()
+    L_JOY_X := 0 #> (data[0] - L_JOY_X_MIN) * 100 / (L_JOY_X_MAX - L_JOY_X_MIN) <# 100
+    L_JOY_Y := 0 #> (data[2] - L_JOY_Y_MIN) * 100 / (L_JOY_Y_MAX - L_JOY_Y_MIN) <# 100
 
 pub pause_game()
     debug(`screen set 400 330 red text 50 '<PAUSED>')
@@ -342,8 +482,27 @@ pub pause_game()
         read_controller()
     start_time := getct()
 
-pub draw_background() | i, j
-    debug(`screen set 384 352 color $743685 box 768 574)
+pub draw_background() | r,c,i, k
+    ' Draw the floors
+    display_score()
+    display_health_bar()
+    repeat i from 0 to 704 step 64
+        debug(`screen set `(i) 50 sprite (200, 0, 2))
+
+    ' k := 0 'This is for the background
+    ' repeat r from 740 to 228 step -64
+    '     repeat c from 0 to 704 step 64
+    '         debug(`screen set `(c) `(r) sprite (`(ds_mini_bg_tiles[k],0,4)))
+    '         k++
+
+
+dat ds_mini_bg_tiles byte {
+}300,   301,    302,    303,    304,    {
+}305,   306,    307,    308,    309,    {
+}310,   311,    312,    313,    314,    {
+}315,   316,    317,    318,    319,    {
+}320,   321,    322,    323,    324,    {
+}325,   326,    327,    328,    329
 
 
 ' The character has 4 sprite images, 2 for the top and 2 for the bottom'
@@ -352,7 +511,46 @@ pub draw_character(top_left,top_right,bottom_left,bottom_right)
     debug(`screen set (`(character[x] + 64), `(character[y])) sprite (`(top_right), `(character_rotation), 2, `(character_opacity)))
     debug(`screen set (`(character[x]), `(character[y] - 64)) sprite (`(bottom_left), `(character_rotation), 2, `(character_opacity)))
     debug(`screen set (`(character[x] + 64), `(character[y] - 64)) sprite (`(bottom_right), `(character_rotation), 2, `(character_opacity)))
-con
+
+pub draw_enemy(enemy_reference) | enemy_top_left, enemy_top_right, enemy_bottom_left, enemy_bottom_right, enemy_rot, x_enemy, y_enemy, enemy_opacity
+
+    ' Configs for the enemy
+    enemy_top_left := enemies[enemy_reference + ENEMY_TOP_LEFT_SPRITE]
+    enemy_top_right := enemies[enemy_reference + ENEMY_TOP_RIGHT_SPRITE]
+    enemy_bottom_left := enemies[enemy_reference + ENEMY_BOTTOM_LEFT_SPRITE]
+    enemy_bottom_right := enemies[enemy_reference + ENEMY_BOTTOM_RIGHT_SPRITE]
+    enemy_rot := enemies[enemy_reference + ENEMY_ROTATION]
+    x_enemy := enemies[enemy_reference + ENEMY_X]
+    y_enemy := enemies[enemy_reference + ENEMY_Y]
+    enemy_opacity := enemies[enemy_reference + ENEMY_OP]
+    if enemy_rot == 1
+        enemy_top_left := enemy_top_right
+        enemy_top_right := enemies[enemy_reference + ENEMY_TOP_LEFT_SPRITE]
+        enemy_bottom_left := enemy_bottom_right
+        enemy_bottom_right := enemies[enemy_reference + ENEMY_BOTTOM_LEFT_SPRITE]
+
+    debug(`screen set (`(x_enemy), `(y_enemy)) sprite (`(enemy_top_left), `(enemy_rot), 2, `(enemy_opacity)))
+    debug(`screen set (`(x_enemy + 64), `(y_enemy)) sprite (`(enemy_top_right), `(enemy_rot), 2, `(enemy_opacity)))
+    debug(`screen set (`(x_enemy), `(y_enemy - 64)) sprite (`(enemy_bottom_left), `(enemy_rot), 2, `(enemy_opacity)))
+    debug(`screen set (`(x_enemy + 64), `(y_enemy - 64)) sprite (`(enemy_bottom_right), `(enemy_rot), 2, `(enemy_opacity)))
+
+pub check_animation_state()
+    if is_button_pressed("A")
+        character_hitting := true
+        character_animation_state := 2
+    elseif is_button_pressed("B")
+        character_jumping := true
+        character_animation_state := 3
+    elseif (L_JOY_X < 45 or L_JOY_X > 55)
+        character_moving := true
+        character_animation_state := 1
+        if L_JOY_X < 45
+            character_rotation := 1
+        else
+            character_rotation := 0
+    else
+        character_moving := false
+        character_animation_state := 0
 
 pub init_controller()
     i2c.setup(10, 11, 400, i2c.PU_1K5)
@@ -388,3 +586,7 @@ pub read_controller() | i
         data[i] := i2c.read(0)
     data[7] := i2c.read(1)
     i2c.stop()
+
+
+' SO I want to be able to spawn in enemies. I have an array of enemies[5] which is the max number of enemies/rounds
+' Every round we spawn in i enemeies, when I spawn an enemy, I need the reference of the enemy to be stored in the enemies array
