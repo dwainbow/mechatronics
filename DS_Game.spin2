@@ -31,7 +31,7 @@ var
     long starting_x, starting_y
 
     ' Enemy-related variables
-    long enemies[40]  ' 5 enemies * 5 parameters each
+    long enemies[50]  ' 5 enemies * 10 parameters each
     long enemy_count, enemies_alive
 
     ' Controller-related variables
@@ -65,37 +65,13 @@ pub video_game() | i
     ' cogspin(2, debug_display(), @stack_2)
     ' cogspin(3,debug_character_motion(), @stack_3)
 
-
     repeat
         start_time := getct()
         debug(`screen clear)
         draw_background()
         read_controller()
-
-        ' Clamping logic
-        L_JOY_X := 0 #> (data[0] - L_JOY_X_MIN) * 100 / (L_JOY_X_MAX - L_JOY_X_MIN) <# 100
-        L_JOY_Y := 0 #> (data[2] - L_JOY_Y_MIN) * 100 / (L_JOY_Y_MAX - L_JOY_Y_MIN) <# 100
-
-        ' if L_JOY_X ==100
-        '     L_JOY_X := 50
-        '     character_animation_state := 0
-
-        if is_button_pressed("A")
-            character_hitting := true
-            character_animation_state := 2
-        elseif is_button_pressed("B")
-            character_jumping := true
-            character_animation_state := 3
-        elseif (L_JOY_X < 45 or L_JOY_X > 55)
-            character_moving := true
-            character_animation_state := 1
-            if L_JOY_X < 45
-                character_rotation := 1
-            else
-                character_rotation := 0
-        else
-            character_moving := false
-            character_animation_state := 0
+        clamp_joysticks()
+        check_animation_state()
 
         case_fast L_JOY_X
             0..20  : character[x] := 0 #> character[x] - 16 <# 740
@@ -228,10 +204,7 @@ pub draw_enemies() | i,base,enemy_rot
                 enemies[base + ENEMY_X] := 0
                 enemies[base + ENEMY_ROTATION] := 1 - enemy_rot 'Invert the rotation
 
-            if enemies[base + ENEMY_ROTATION] == 0
-                draw_character(enemy_top_left, enemy_top_right, enemy_bottom_left, enemy_bottom_right)
-            else
-                draw_character(enemy_top_right, enemy_top_left, enemy_bottom_right, enemy_bottom_left)
+            draw_enemy(@base)
 
 pub init_enemy(enemy_reference) | i
     enemies[enemy_reference + ENEMY_TOP_LEFT_SPRITE] := 80
@@ -242,6 +215,7 @@ pub init_enemy(enemy_reference) | i
     enemies[enemy_reference + ENEMY_Y] := 176
     enemies[enemy_reference + ENEMY_ROTATION] := 0
     enemies[enemy_reference + ENEMY_HP] := 1
+    enemies_alive++
 
     'TODO: #1 Implement Cogs for the enemies 
 
@@ -258,6 +232,15 @@ pub enemy_motion(enemy_reference)
         case enemy_animation_state
             0: trigger_enemy_animation(@enemey_reference)
 
+pub check_enemies_status() | i, base
+    repeat i from 0 to enemy_count - 1
+        base := i * ENEMY_SIZE
+        if enemies[base + ENEMY_ACTIVE] == 0
+            enemies_alive--
+
+    if enemies_alive == 0
+        round_num++
+        ' TODO: #3 Implement starting round logic
 
 pub trigger_enemy_animation(enemy_reference) | enemy_top_left, enemy_top_right, enemy_bottom_left, enemy_bottom_right
     enemies[enemy_reference + ENEMY_TOP_LEFT_SPRITE] := 80
@@ -324,12 +307,7 @@ pub trigger_standing_animation()
     character_top_right := 2
     character_bottom_left := 3
     character_bottom_right := 4
-    ' repeat while character_moving == false
-    '     advance_frame_4(@character_top_left, 1, 5, 9, 13)
-    '     advance_frame_4(@character_top_right, 2, 6, 10, 14)
-    '     advance_frame_4(@character_bottom_left, 3, 7, 11, 15)
-    '     advance_frame_4(@character_bottom_right, 4, 8, 12, 16)
-    '     waitms(300)
+
 
 pub advance_frame_4(sprite_ptr, val_1, val_2, val_3, val_4)
     case long[sprite_ptr]
@@ -418,6 +396,11 @@ pub check_collision(Box1address, Box2address) : CollisionState
         if CollisionState == true
             debug(`screen set 400 330 red text 50 'Collision!!!')
 
+
+pub clamp_joysticks():
+    L_JOY_X := 0 #> (data[0] - L_JOY_X_MIN) * 100 / (L_JOY_X_MAX - L_JOY_X_MIN) <# 100
+    L_JOY_Y := 0 #> (data[2] - L_JOY_Y_MIN) * 100 / (L_JOY_Y_MAX - L_JOY_Y_MIN) <# 100
+
 pub pause_game()
     debug(`screen set 400 330 red text 50 '<PAUSED>')
     debug(`screen update `dly(1000))
@@ -442,9 +425,6 @@ pub draw_background() | r,c,i k
             k++
 
     
-    
-
-
 pub get_matrix_element(address, row,column) : element
     element := byte[address + (row-1)*5+(column-1)]
   
@@ -484,7 +464,23 @@ pub draw_enemy(enemy_reference) | enemy_top_left, enemy_top_right, enemy_bottom_
     debug(`screen set (`(enemy_x), `(enemy_y - 64)) sprite (`(enemy_bottom_left), `(enemy_rotation), 2, `(enemy_opacity)))
     debug(`screen set (`(enemy_x + 64), `(enemy_y - 64)) sprite (`(enemy_bottom_right), `(enemy_rotation), 2, `(enemy_opacity)))
 
-con
+pub check_animation_state()
+    if is_button_pressed("A")
+        character_hitting := true
+        character_animation_state := 2
+    elseif is_button_pressed("B")
+        character_jumping := true
+        character_animation_state := 3
+    elseif (L_JOY_X < 45 or L_JOY_X > 55)
+        character_moving := true
+        character_animation_state := 1
+        if L_JOY_X < 45
+            character_rotation := 1
+        else
+            character_rotation := 0
+    else
+        character_moving := false
+        character_animation_state := 0
 
 pub init_controller()
     i2c.setup(10, 11, 400, i2c.PU_1K5)
