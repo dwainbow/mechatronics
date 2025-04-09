@@ -34,7 +34,7 @@ var
     long character_rotation, character_opacity
     long character_hitting, character_jumping, character_moving, character_animation_state
     long starting_x, starting_y
-    long character_hp
+    long character_hp, character_score
 
     ' Enemy-related variables
     long enemies[MAX_ENEMIES*ENEMY_SIZE]  ' 5 enemies * 10 parameters each
@@ -61,8 +61,6 @@ var
 
     long round_started
 
-    long player_score
-
 
 pub video_game() | i
     debug(`plot screen pos 100 0 size 768 640 backcolor black update)
@@ -75,83 +73,103 @@ pub video_game() | i
     ' easter_egg := false
     round_num :=1
     init_character()
-    ' cogspin(2, debug_display(), @stack_2)
+    ' cogspin(7, debug_display(), @stack_7)
     ' cogspin(3,debug_character_motion(), @stack_3)
-    cogspin(4, debug_enemy(), @stack_4)
+    ' cogspin(4, debug_enemy(), @stack_4)
+
     repeat
         start_time := getct()
         debug(`screen clear)
         draw_background()
         if round_started == false
             start_round()
+        
+        if enemies_alive == 0
+            advance_round()
         read_controller()
         clamp_joysticks()
-        ' if character_rotation == 0
-        '     draw_character(character_top_left, character_top_right, character_bottom_left, character_bottom_right)
-        ' else
-        '     draw_character(character_top_right, character_top_left, character_bottom_right, character_bottom_left)
+        if character_rotation == 0
+            draw_character(character_top_left, character_top_right, character_bottom_left, character_bottom_right)
+        else
+            draw_character(character_top_right, character_top_left, character_bottom_right, character_bottom_left)
         draw_enemies()
         check_animation_state()
         move_character()
-        ' check_collisions_with_enemies()
+        check_collisions_with_enemies()
         check_win_status()
-        ' if enemies_alive == 0
-        '     advance_round()
-
-        if is_button_pressed("A")
-            advance_round()
         if is_button_pressed("P")
             pause_game()
+
         adjust_frame_rate()
 
 pub create_instruction_menu()
     debug(`screen clear)
-    debug(`screen set 400 300 red text 30 'Welcome to Demon Slayer Game!')
-    debug(`screen set 400 350 white text 15 'How to Play:')
-    debug(`screen set 400 380 white text 15 'Eliminate as many enemies as possible without dying.')
+    debug(`screen set 400 550 red text 30 'Welcome to the Demon Slayer Game!')
+    debug(`screen set 400 470 white text 15 'How to Play:')
+    debug(`screen set 400 440 white text 15 'Eliminate as many enemies as possible without dying.')
     debug(`screen set 400 410 white text 15 'Use the joystick to move and buttons to attack or jump.')
-    debug(`screen set 400 440 white text 15 'Press A to attack, B to jump, and Select to pause.')
-    debug(`screen set 400 470 white text 15 'Good luck, and have fun!')
+    debug(`screen set 400 380 white text 15 'Press A to attack, B to jump, and Select to pause.')
+    debug(`screen set 400 350 white text 15 'Good luck, and have fun!')
     debug(`screen update)
     waitms(7000)
     debug(`screen clear)
 ' TODO: Make a health bar
 pub display_health_bar()| i
-    ' repeat i from 0 to 2
-    '     if i < character_hp
-    '         debug(`screen set `(50 + i * 22) 600) green box `(68 + i * 22) 620)  ' Full block
-    '     else
-    '         debug(`screen set `(50 + i * 22) 600) red box `(68 + i * 22) 620)   ' Empty block
+    debug(`screen set 60 620 white text 20 'HP: `(character_hp))
 
 pub display_score()
-    debug(`screen set 700 620 red text 20 'Score: `(player_score))
+    debug(`screen set 700 620 red text 20 'Score: `(character_score))
 
 pub start_round()
+    start_time := getct()
     debug(`screen set 400 330 red text 50 'Round `(round_num))
     debug(`screen update `dly(1000))
-    waitms(2000)
+    waitms(1000)
     spawn_enemies()
     waitms(100)
     round_started := true
 
 pub advance_round()
-    if round_num <= MAX_ENEMIES
-        round_num++
-        round_started := false
+    if round_num >MAX_ENEMIES
+        return
+    round_num++
+    round_started := false
 
 pub check_win_status()
-    if round_num >=5 && enemies_alive ==0
+    read_controller()
+    if character_hp < 0
+        waitms(100)
+        debug(`screen set 400 330 red text 30 'You Lose! Press A to Restart')
+        debug(`screen update `dly(1000))
         repeat until is_button_pressed("A")
-            debug(`screen set 400 330 red text 30 'You Win! Press A to Restart')
-            debug(`screen update `dly(1000))
+            read_controller()
+            waitms(100)
         restart_game()
+        return
+
+    if round_num >= MAX_ENEMIES
+        waitms(100)
+        debug(`screen set 400 330 red text 30 'You Win! Press A to Restart')
+        debug(`screen update `dly(1000))
+        repeat until is_button_pressed("A")
+            read_controller()
+            waitms(100)
+
+        restart_game()
+        return
+
+pub despawn_enemies() | i, base
+    enemies_alive := 0
+    repeat i from 0 to round_num-1
+        base := i * ENEMY_SIZE
+        despawn_enemy(base)
+
 
 pub restart_game()
     round_num := 1
-    enemies_alive := 0
     round_started := false
-    character[x] := starting_x
-    character[y] := starting_y
+    init_character()
+    despawn_enemies()
 
 
 pub adjust_frame_rate()
@@ -280,18 +298,12 @@ pub debug_character_motion()
 
             display_delay := getct() + clkfreq / 4
 
-pub check_lose_status()
-    if character_hp <= 0
-        repeat until is_button_pressed("A")
-            debug(`screen set 400 330 red text 30 'You Lose! Press A to Restart')
-            debug(`screen update `dly(1000))
-        restart_game()
 pub spawn_enemies() | i, base,result
     repeat i from 0 to round_num-1
         base := i * ENEMY_SIZE
         init_enemy(base)
         cogspin(i + 2, enemy_motion(base), @enemy_stacks[i * 500])
-        waitms(100)
+
 
 pub despawn_enemy(base)
     enemies[base + ENEMY_ACTIVE] := false
@@ -354,10 +366,6 @@ pub trigger_enemy_animation(enemy_reference)
     advance_frame_3(@enemies[enemy_reference + ENEMY_BOTTOM_LEFT_SPRITE], 82, 86, 90)
     advance_frame_3(@enemies[enemy_reference + ENEMY_BOTTOM_RIGHT_SPRITE], 83, 87, 91)
 
-    ' waitms(50)
-
-
-
 pub trigger_hit_animation()
     character_top_left := 50
     character_top_right := 51
@@ -369,7 +377,7 @@ pub trigger_hit_animation()
         advance_frame_4(@character_top_right, 51, 55, 59, 63)
         advance_frame_4(@character_bottom_left, 52, 56, 60, 64)
         advance_frame_4(@character_bottom_right, 53, 57, 61, 65)
-        waitms(200)
+        waitms(100)
     character_hitting:=false
     character_animation_state := 0
 
@@ -390,8 +398,8 @@ pub trigger_jumping_animation()
     waitms(100)
 
 pub handle_gravity()
-    jump_help:= 25
-    repeat while character[y] < 300
+    jump_help:= 30
+    repeat while character[y] < 400
         character[y] := character[y] + jump_help
 
     waitms(200)
@@ -452,34 +460,36 @@ pub init_character()
 
     character_animation_state := 0
     character_opacity := 255
-    character_hp := 3
+    character_hp := 100
+    character_score := 0
 
     cogspin(1, character_motion(), @stack_1)
+pub check_collisions_with_enemies() | i, base, dx, dy
+    repeat i from 0 to round_num - 1
+        base := i * ENEMY_SIZE
+        ifnot enemies[base + ENEMY_ACTIVE]
+            next
 
-' pub check_collisions_with_enemies()| i, base, dx, dy, threshold
-'     ' collision_state := false
-'     threshold := 10 ' You can tweak this value for sensitivity
+        dx := character[x] - enemies[base + ENEMY_X]
+        dy := character[y] - enemies[base + ENEMY_Y]
 
-'     repeat i from 0 to round_num-1
-'         base := i * ENEMY_SIZE
+        ' Skip square root; 4096 = 64^2
+        if dx * dx + dy * dy < 4096
+            if character_animation_state ==2
+                despawn_enemy(base)
+                character_score++
+            else
+                character_hp--
+                cogspin(7, flash_opacity(), @stack_6)  ' <- Run flash in its own cog
+            return  ' Exit early after one collision
 
-'         ' Only check active enemies
-'         if enemies[base + ENEMY_ACTIVE] == true
-'             dx := abs(character[x] - enemies[base + ENEMY_X])
-'             dy := abs(character[y] - enemies[base + ENEMY_Y])
+pub flash_opacity()
+    repeat 4
+        character_opacity := 50
+        waitms(100)
+        character_opacity := 255
+        waitms(100)
 
-'             if dx < threshold || dy < threshold
-'                 if character_hitting
-'                     despawn_enemy(base)
-'                     player_score += 1
-'                     ' collision_state:=true
-'                 else
-'                     toggle_character_opacity()
-'                 return
-
-pub toggle_character_opacity()
-    character_opacity := 255 - character_opacity
-    waitms(300)
 pub clamp_joysticks()
     L_JOY_X := 0 #> (data[0] - L_JOY_X_MIN) * 100 / (L_JOY_X_MAX - L_JOY_X_MIN) <# 100
     L_JOY_Y := 0 #> (data[2] - L_JOY_Y_MIN) * 100 / (L_JOY_Y_MAX - L_JOY_Y_MIN) <# 100
@@ -599,7 +609,3 @@ pub read_controller() | i
         data[i] := i2c.read(0)
     data[7] := i2c.read(1)
     i2c.stop()
-
-
-' SO I want to be able to spawn in enemies. I have an array of enemies[5] which is the max number of enemies/rounds
-' Every round we spawn in i enemeies, when I spawn an enemy, I need the reference of the enemy to be stored in the enemies array
