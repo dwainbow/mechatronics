@@ -63,8 +63,10 @@ var
 
     long player_score
 
+
 pub video_game() | i
     debug(`plot screen pos 100 0 size 768 640 backcolor black update)
+    create_instruction_menu()
     debug(`screen set 400 330 blue text 50 'Loading sprites...')
     debug(`screen update)
     init_controller()
@@ -102,6 +104,17 @@ pub video_game() | i
             pause_game()
         adjust_frame_rate()
 
+pub create_instruction_menu()
+    debug(`screen clear)
+    debug(`screen set 400 300 red text 30 'Welcome to Demon Slayer Game!')
+    debug(`screen set 400 350 white text 15 'How to Play:')
+    debug(`screen set 400 380 white text 15 'Eliminate as many enemies as possible without dying.')
+    debug(`screen set 400 410 white text 15 'Use the joystick to move and buttons to attack or jump.')
+    debug(`screen set 400 440 white text 15 'Press A to attack, B to jump, and Select to pause.')
+    debug(`screen set 400 470 white text 15 'Good luck, and have fun!')
+    debug(`screen update)
+    waitms(7000)
+    debug(`screen clear)
 ' TODO: Make a health bar
 pub display_health_bar()| i
     ' repeat i from 0 to 2
