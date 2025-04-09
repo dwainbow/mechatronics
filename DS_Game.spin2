@@ -61,10 +61,8 @@ pub video_game() | i
     ' easter_egg := false
     round_num :=1
     init_character()
-
     ' cogspin(2, debug_display(), @stack_2)
     ' cogspin(3,debug_character_motion(), @stack_3)
-
     repeat
         start_time := getct()
         debug(`screen clear)
@@ -72,30 +70,34 @@ pub video_game() | i
         read_controller()
         clamp_joysticks()
         check_animation_state()
-
-        case_fast L_JOY_X
-            0..20  : character[x] := 0 #> character[x] - 16 <# 740
-            21..30  : character[x] := 0 #> character[x] - 8 <# 740
-            31..40  : character[x] := 0 #> character[x] - 4 <# 740
-            61..70  : character[x] := 0 #> character[x] + 4 <# 740
-            71..80  : character[x] := 0 #> character[x] + 8 <# 740
-            81..100 : character[x] := 0 #> character[x] + 16 <# 740
+        move_character()
 
         if character_rotation == 0
             draw_character(character_top_left, character_top_right, character_bottom_left, character_bottom_right)
         else
             draw_character(character_top_right, character_top_left, character_bottom_right, character_bottom_left)
 
-
-        if data[6].[4] == 0
+        if is_button_pressed("Select")
             pause_game()
+        adjust_frame_rate()
 
-        frame_rate := frame_time * 300_000 - abs(start_time - getct())
-        if frame_rate <= 0
-            debug(`screen set 384 600 red text 20 'Frame loop took longer than 100ms!!!')
-        waitct(frame_rate + getct())
-        debug(`screen update)
-        raw_loop_time := abs(start_time - getct())
+
+pub adjust_frame_rate
+    frame_rate := frame_time * 300_000 - abs(start_time - getct())
+    if frame_rate <= 0
+        debug(`screen set 384 600 red text 20 'Frame loop took longer than 100ms!!!')
+    waitct(frame_rate + getct())
+    debug(`screen update)
+    raw_loop_time := abs(start_time - getct())
+
+pub move_character()
+    case_fast L_JOY_X
+        0..20  : character[x] := 0 #> character[x] - 16 <# 740
+        21..30  : character[x] := 0 #> character[x] - 8 <# 740
+        31..40  : character[x] := 0 #> character[x] - 4 <# 740
+        61..70  : character[x] := 0 #> character[x] + 4 <# 740
+        71..80  : character[x] := 0 #> character[x] + 8 <# 740
+        81..100 : character[x] := 0 #> character[x] + 16 <# 740
 
 pub debug_display()
     debug(`term term1 pos 867 0 size 28 12 textsize 18 color cyan)
@@ -149,9 +151,9 @@ pub is_button_pressed(button) : boolean
             return data[7].[7] == 0
         "Z":
             return data[7].[2] == 0
-        "Start":
-            return data[6].[4] == 0
         "Select":
+            return data[6].[4] == 0
+        "Start":
             return data[6].[5] == 0
         other:
             return false
