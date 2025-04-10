@@ -7,7 +7,7 @@ con _clkfreq = 300_000_000
     collision_debug_mode=true
 
 obj
-    sprites : "DS_Sprites"
+    sprites : "EkowDanielsSprites"
     i2c     : "jm_i2c"
 
 CON
@@ -24,7 +24,7 @@ CON
     ENEMY_OP = 10
     ENEMY_ID = 11
 
-    MAX_ENEMIES = 5
+    MAX_ENEMIES = 6
     ENEMY_SIZE = 12
 var
     ' Character-related variables
@@ -37,10 +37,9 @@ var
     long character_hp, character_score
 
     ' Enemy-related variables
-    long enemies[MAX_ENEMIES*ENEMY_SIZE]  ' 5 enemies * 10 parameters each
+    long enemies[MAX_ENEMIES*ENEMY_SIZE]  ' 5 enemies * 12 parameters each
     long enemy_count, enemies_alive
     long enemy_stacks[MAX_ENEMIES*500]  ' one 100-long stack per enemy
-
 
     ' Controller-related variables
     byte data[8]
@@ -59,50 +58,52 @@ var
     long stack_0[500], stack_1[500], stack_2[500], stack_3[500]
     long stack_4[500], stack_5[500], stack_6[500], stack_7[500]
 
-    long round_started
+    long round_started, game_restarted
+    long showing_easter_egg
+    long hard_mode
 
 
 pub video_game() | i
-    debug(`plot screen pos 100 0 size 768 640 backcolor black update)
-    create_instruction_menu()
-    debug(`screen set 400 330 blue text 50 'Loading sprites...')
-    debug(`screen update)
-    init_controller()
-    sprites.load_sprites()
-    ' define_collision_areas()
-    ' easter_egg := false
-    round_num :=1
-    init_character()
-    ' cogspin(7, debug_display(), @stack_7)
-    ' cogspin(3,debug_character_motion(), @stack_3)
-    ' cogspin(4, debug_enemy(), @stack_4)
-
+    debug(`plot screen pos 100 0 size 768 640 backcolor black update) ' Initialize the game screen
+    create_instruction_menu() ' Display the instruction menu
+    debug(`screen set 400 330 blue text 50 'Loading sprites...') ' Show loading message
+    debug(`screen update) ' Update the screen
+    init_controller() ' Initialize the game controller
+    sprites.load_sprites() ' Load the sprite assets
+    round_num := 1 ' Set the initial round number
+    init_character() ' Initialize the character's properties
+    hard_mode := false ' Disable hard mode initially
+    
     repeat
-        start_time := getct()
-        debug(`screen clear)
-        draw_background()
+        start_time := getct() ' Record the start time of the frame
+        debug(`screen clear) ' Clear the screen for the new frame
+        check_easter_egg_activated() ' Check if the easter egg is activated
+        draw_background() ' Draw the game background
         if round_started == false
-            start_round()
-        
-        if enemies_alive == 0
-            advance_round()
-        read_controller()
-        clamp_joysticks()
-        if character_rotation == 0
-            draw_character(character_top_left, character_top_right, character_bottom_left, character_bottom_right)
-        else
-            draw_character(character_top_right, character_top_left, character_bottom_right, character_bottom_left)
-        draw_enemies()
-        check_animation_state()
-        move_character()
-        check_collisions_with_enemies()
-        check_win_status()
-        if is_button_pressed("P")
-            pause_game()
+            start_round() ' Start a new round if not already started
+            game_restarted := false ' Reset the game restart flag
 
-        adjust_frame_rate()
+        if enemies_alive == 0
+            advance_round() ' Advance to the next round if all enemies are defeated
+        read_controller() ' Read the controller input
+        clamp_joysticks() ' Clamp joystick values to valid ranges
+        if character_rotation == 0
+            draw_character(character_top_left, character_top_right, character_bottom_left, character_bottom_right) ' Draw the character facing right
+        else
+            draw_character(character_top_right, character_top_left, character_bottom_right, character_bottom_left) ' Draw the character facing left
+        draw_enemies() ' Draw all active enemies
+        check_animation_state() ' Update the character's animation state based on input
+        move_character() ' Move the character based on joystick input
+        check_collisions_with_enemies() ' Check for collisions between the character and enemies
+        check_win_status() ' Check if the player has won or lost
+        if is_button_pressed("P")
+            pause_game() ' Pause the game if the pause button is pressed
+        adjust_frame_rate() 'adjust the frame rate to maintain a consistent speed
+
+
 
 pub create_instruction_menu()
+    ' This creates a menu with instructions on how to play the game
     debug(`screen clear)
     debug(`screen set 400 550 red text 30 'Welcome to the Demon Slayer Game!')
     debug(`screen set 400 470 white text 15 'How to Play:')
@@ -113,14 +114,17 @@ pub create_instruction_menu()
     debug(`screen update)
     waitms(7000)
     debug(`screen clear)
-' TODO: Make a health bar
+
 pub display_health_bar()| i
-    debug(`screen set 60 620 white text 20 'HP: `(character_hp))
+    'This function displays the health bar of the character
+    debug(`screen set 60 620 red text 20 'HP: `(character_hp))
 
 pub display_score()
+    'This function displays the score of the character
     debug(`screen set 700 620 red text 20 'Score: `(character_score))
 
 pub start_round()
+    ' This function starts a new round of the game
     start_time := getct()
     debug(`screen set 400 330 red text 50 'Round `(round_num))
     debug(`screen update `dly(1000))
@@ -130,12 +134,16 @@ pub start_round()
     round_started := true
 
 pub advance_round()
+    ' This function advances to the next round of the game
     if round_num >MAX_ENEMIES
         return
-    round_num++
-    round_started := false
+    
+    ifnot game_restarted
+        round_num++
+        round_started := false
 
 pub check_win_status()
+    ' This function checks if the player has won or lost the game
     read_controller()
     if character_hp < 0
         waitms(100)
@@ -147,7 +155,7 @@ pub check_win_status()
         restart_game()
         return
 
-    if round_num >= MAX_ENEMIES
+    if round_num >= MAX_ENEMIES && enemies_alive == 0
         waitms(100)
         debug(`screen set 400 330 red text 30 'You Win! Press A to Restart')
         debug(`screen update `dly(1000))
@@ -158,7 +166,24 @@ pub check_win_status()
         restart_game()
         return
 
+pub check_easter_egg_activated()
+    ' This function checks if the easter egg is activated
+    read_controller()
+    if enemies_alive == 1 && round_num == 2
+        if is_button_pressed("B")
+            hard_mode := true
+            waitms(100)
+            debug(`screen set 400 330 red text 20 'Hard Mode Activated! Press A to Continue')
+            debug(`screen update `dly(1000))
+            repeat until is_button_pressed("A")
+                read_controller()
+                waitms(100)
+            round_num := 4
+            despawn_enemies()
+            spawn_enemies()
+
 pub despawn_enemies() | i, base
+    ' This function despawns all enemies in the game
     enemies_alive := 0
     repeat i from 0 to round_num-1
         base := i * ENEMY_SIZE
@@ -166,13 +191,18 @@ pub despawn_enemies() | i, base
 
 
 pub restart_game()
+    ' This function restarts the game
     round_num := 1
+    game_restarted := true
     round_started := false
+    hard_mode := false
     init_character()
     despawn_enemies()
+    spawn_enemies()
 
 
 pub adjust_frame_rate()
+    ' This function adjusts the frame rate of the game
     frame_rate := frame_time * 300_000 - abs(start_time - getct())
     if frame_rate <= 0
         debug(`screen set 384 600 red text 20 'Frame loop took longer than 100ms!!!')
@@ -181,6 +211,7 @@ pub adjust_frame_rate()
     raw_loop_time := abs(start_time - getct())
 
 pub move_character()
+    ' This function moves the character based on joystick input
     case_fast L_JOY_X
         0..20  : character[x] := 0 #> character[x] - 16 <# 740
         21..30  : character[x] := 0 #> character[x] - 8 <# 740
@@ -190,6 +221,7 @@ pub move_character()
         81..100 : character[x] := 0 #> character[x] + 16 <# 740
 
 pub debug_enemy()| i,base
+    
     debug(`term term3 pos 1150 300 size 32 12 textsize 18 color green)
     display_delay := clkfreq / 4 + getct()
 
@@ -255,15 +287,12 @@ pub debug_display()
 
 
 pub is_button_pressed(button) : boolean
+    ' This function checks if a specific button is pressed
     case button
         "A":
             return data[7].[4] == 0
-        "Y":
-            return data[7].[5] == 0
         "B":
             return data[7].[6] == 0
-        "Z":
-            return data[7].[2] == 0
         "P": ''THis is the select button
             return data[6].[4] == 0
         "S": ''This is the start button
@@ -299,25 +328,28 @@ pub debug_character_motion()
             display_delay := getct() + clkfreq / 4
 
 pub spawn_enemies() | i, base,result
+    ' This function spawns enemies in the game
     repeat i from 0 to round_num-1
         base := i * ENEMY_SIZE
         init_enemy(base)
-        cogspin(i + 2, enemy_motion(base), @enemy_stacks[i * 500])
-
+        cogspin(i + 2, enemy_motion(base), @enemy_stacks[i * 500]) 'automatically assign a cog to each enemy
+        
 
 pub despawn_enemy(base)
+    ' This function despawns an enemy
     enemies[base + ENEMY_ACTIVE] := false
     enemies[base + ENEMY_OP]:=0
     enemies_alive--
     cogstop(base / ENEMY_SIZE + 2)
 pub draw_enemies() | i,base,enemy_rot
+    ' This function draws all active enemies on the screen
     repeat i from 0 to round_num-1
         base := i * ENEMY_SIZE
         if enemies[base + ENEMY_ACTIVE]
             draw_enemy(base)
 
 pub init_enemy(enemy_reference)
-
+    ' This function initializes an enemy's properties
     enemies[enemy_reference + ENEMY_TOP_LEFT_SPRITE] := 80
     enemies[enemy_reference + ENEMY_TOP_RIGHT_SPRITE] := 81
     enemies[enemy_reference + ENEMY_BOTTOM_LEFT_SPRITE] := 82
@@ -332,6 +364,7 @@ pub init_enemy(enemy_reference)
     enemies_alive++
 
 pub handle_enemy_movement(enemy_reference)
+    ' This function handles the movement of an enemy
     if enemies[enemy_reference + ENEMY_X] > 640
         enemies[enemy_reference + ENEMY_X] := 640
         enemies[enemy_reference + ENEMY_ROTATION] :=1
@@ -340,15 +373,8 @@ pub handle_enemy_movement(enemy_reference)
         enemies[enemy_reference + ENEMY_ROTATION] :=0
 
 
-pub character_motion()
-    repeat
-        case character_animation_state
-            0: trigger_standing_animation()
-            1: trigger_running_animation()
-            2: trigger_hit_animation()
-            3: trigger_jumping_animation()
-
 pub enemy_motion(enemy_reference)
+    ' This function controls the enemy's motion
     repeat
         trigger_enemy_animation(enemy_reference)
         handle_enemy_movement(enemy_reference)
@@ -356,17 +382,29 @@ pub enemy_motion(enemy_reference)
         waitms(20)
 
 pub move_enemy(enemy_reference)
+    ' This function moves the enemy based on its rotation
     if enemies[enemy_reference + ENEMY_ROTATION] == 0
         enemies[enemy_reference + ENEMY_X] := enemies[enemy_reference + ENEMY_X] + 1
     else
         enemies[enemy_reference + ENEMY_X] := enemies[enemy_reference + ENEMY_X] - 1
 pub trigger_enemy_animation(enemy_reference)
+    ' This function triggers the enemy's animation
     advance_frame_3(@enemies[enemy_reference + ENEMY_TOP_LEFT_SPRITE], 80, 84, 88)
     advance_frame_3(@enemies[enemy_reference + ENEMY_TOP_RIGHT_SPRITE], 81, 85, 89)
     advance_frame_3(@enemies[enemy_reference + ENEMY_BOTTOM_LEFT_SPRITE], 82, 86, 90)
     advance_frame_3(@enemies[enemy_reference + ENEMY_BOTTOM_RIGHT_SPRITE], 83, 87, 91)
 
+pub character_motion()
+    ' This function controls the character's motion
+    repeat
+        case character_animation_state
+            0: trigger_standing_animation()
+            1: trigger_running_animation()
+            2: trigger_hit_animation()
+            3: trigger_jumping_animation()
+
 pub trigger_hit_animation()
+    ' This function triggers the character's hit animation
     character_top_left := 50
     character_top_right := 51
     character_bottom_left := 52
@@ -382,6 +420,7 @@ pub trigger_hit_animation()
     character_animation_state := 0
 
 pub trigger_jumping_animation()
+    ' This function triggers the character's jumping animation
     character_top_left := 70
     character_top_right := 71
     character_bottom_left := 72
@@ -398,6 +437,7 @@ pub trigger_jumping_animation()
     waitms(100)
 
 pub handle_gravity()
+    ' This function handles the character's jumping and gravity
     jump_help:= 30
     repeat while character[y] < 400
         character[y] := character[y] + jump_help
@@ -414,6 +454,7 @@ pub handle_gravity()
 
 
 pub trigger_standing_animation()
+    ' This function triggers the character's standing animation
     character_top_left := 1
     character_top_right := 2
     character_bottom_left := 3
@@ -421,6 +462,7 @@ pub trigger_standing_animation()
 
 
 pub advance_frame_4(sprite_ptr, val_1, val_2, val_3, val_4)
+    ' This function advances the frame of the character's animation
     case long[sprite_ptr]
         val_1: long[sprite_ptr] := val_2
         val_2: long[sprite_ptr] := val_3
@@ -435,6 +477,7 @@ pub advance_frame_3(sprite_ptr, val_1, val_2, val_3)
 
 
 pub trigger_running_animation()
+    ' This function triggers the character's running animation
     character_top_left := 20
     character_top_right := 21
     character_bottom_left := 22
@@ -447,6 +490,7 @@ pub trigger_running_animation()
         waitms(100)
 
 pub init_character()
+    ' This function initializes the character's properties
     starting_x := 80
     starting_y := 176
 
@@ -465,6 +509,7 @@ pub init_character()
 
     cogspin(1, character_motion(), @stack_1)
 pub check_collisions_with_enemies() | i, base, dx, dy
+    ' This function checks for collisions between the character and enemies
     repeat i from 0 to round_num - 1
         base := i * ENEMY_SIZE
         ifnot enemies[base + ENEMY_ACTIVE]
@@ -473,17 +518,21 @@ pub check_collisions_with_enemies() | i, base, dx, dy
         dx := character[x] - enemies[base + ENEMY_X]
         dy := character[y] - enemies[base + ENEMY_Y]
 
-        ' Skip square root; 4096 = 64^2
-        if dx * dx + dy * dy < 4096
+
+        if dx * dx + dy * dy < 70*70
             if character_animation_state ==2
                 despawn_enemy(base)
                 character_score++
             else
-                character_hp--
-                cogspin(7, flash_opacity(), @stack_6)  ' <- Run flash in its own cog
-            return  ' Exit early after one collision
+                if hard_mode
+                    character_hp-=2
+                else
+                    character_hp--
+                cogspin(7, flash_opacity(), @stack_6)
+            return
 
 pub flash_opacity()
+    ' This function flashes the character's opacity
     repeat 4
         character_opacity := 50
         waitms(100)
@@ -491,10 +540,12 @@ pub flash_opacity()
         waitms(100)
 
 pub clamp_joysticks()
+    ' This function clamps the joystick values to valid ranges
     L_JOY_X := 0 #> (data[0] - L_JOY_X_MIN) * 100 / (L_JOY_X_MAX - L_JOY_X_MIN) <# 100
     L_JOY_Y := 0 #> (data[2] - L_JOY_Y_MIN) * 100 / (L_JOY_Y_MAX - L_JOY_Y_MIN) <# 100
 
 pub pause_game()
+    ' This function pauses the game
     debug(`screen set 400 330 red text 50 '<PAUSED>')
     debug(`screen update `dly(1000))
     read_controller()
@@ -505,28 +556,56 @@ pub pause_game()
         read_controller()
     start_time := getct()
 
-pub draw_background() | r,c,i, k
-    ' Draw the floors
+pub draw_background() | i
+    ' Background tiles (trees)
+   ' Row 1 (y = 710)
+    debug(`screen set -30  710 sprite (150, 0, 5))
+    debug(`screen set 130  710 sprite (151, 0, 5))
+    debug(`screen set 290  710 sprite (152, 0, 5))
+    debug(`screen set 450  710 sprite (153, 0, 5))
+    debug(`screen set 610  710 sprite (154, 0, 5))
+
+    ' Row 2 (y = 550)
+    debug(`screen set -30  550 sprite (155, 0, 5))
+    debug(`screen set 130  550 sprite (156, 0, 5))
+    debug(`screen set 290  550 sprite (157, 0, 5))
+    debug(`screen set 450  550 sprite (158, 0, 5))
+    debug(`screen set 610  550 sprite (159, 0, 5))
+
+    ' Row 3 (y = 390)
+    debug(`screen set -30  390 sprite (160, 0, 5))
+    debug(`screen set 130  390 sprite (161, 0, 5))
+    debug(`screen set 290  390 sprite (162, 0, 5))
+    debug(`screen set 450  390 sprite (163, 0, 5))
+    debug(`screen set 610  390 sprite (164, 0, 5))
+
+    ' Row 4 (y = 230)
+    debug(`screen set -30  230 sprite (165, 0, 5))
+    debug(`screen set 130  230 sprite (166, 0, 5))
+    debug(`screen set 290  230 sprite (167, 0, 5))
+    debug(`screen set 450  230 sprite (168, 0, 5))
+    debug(`screen set 610  230 sprite (169, 0, 5))
+
+    ' Row 5 (y = 70)
+    debug(`screen set -30  70 sprite (170, 0, 5))
+    debug(`screen set 130  70 sprite (171, 0, 5))
+    debug(`screen set 290  70 sprite (172, 0, 5))
+    debug(`screen set 450  70 sprite (173, 0, 5))
+    debug(`screen set 610  70 sprite (174, 0, 5))
+
     display_score()
     display_health_bar()
     repeat i from 0 to 704 step 64
         debug(`screen set `(i) 50 sprite (200, 0, 2))
 
-    ' k := 0 'This is for the background
-    ' repeat r from 740 to 228 step -64
-    '     repeat c from 0 to 704 step 64
-    '         debug(`screen set `(c) `(r) sprite (`(ds_mini_bg_tiles[k],0,4)))
-    '         k++
 
-
-dat ds_mini_bg_tiles byte {
-}300,   301,    302,    303,    304,    {
-}305,   306,    307,    308,    309,    {
-}310,   311,    312,    313,    314,    {
-}315,   316,    317,    318,    319,    {
-}320,   321,    322,    323,    324,    {
-}325,   326,    327,    328,    329
-
+    
+dat trees_tiles byte {
+}150,   151,    152,    153,    154,    {
+}155,   156,    157,    158,    159,    {
+}160,   161,    162,    163,    164,    {
+}165,   166,    167,    168,    169,    {
+}170,   171,    172,    173,    174
 
 ' The character has 4 sprite images, 2 for the top and 2 for the bottom'
 pub draw_character(top_left,top_right,bottom_left,bottom_right)
@@ -552,12 +631,14 @@ pub draw_enemy(enemy_reference) | enemy_top_left, enemy_top_right, enemy_bottom_
         enemy_bottom_left := enemy_bottom_right
         enemy_bottom_right := enemies[enemy_reference + ENEMY_BOTTOM_LEFT_SPRITE]
 
+    'Draws the enemy
     debug(`screen set (`(x_enemy), `(y_enemy)) sprite (`(enemy_top_left), `(enemy_rot), 2, `(enemy_opacity)))
     debug(`screen set (`(x_enemy + 64), `(y_enemy)) sprite (`(enemy_top_right), `(enemy_rot), 2, `(enemy_opacity)))
     debug(`screen set (`(x_enemy), `(y_enemy - 64)) sprite (`(enemy_bottom_left), `(enemy_rot), 2, `(enemy_opacity)))
     debug(`screen set (`(x_enemy + 64), `(y_enemy - 64)) sprite (`(enemy_bottom_right), `(enemy_rot), 2, `(enemy_opacity)))
 
 pub check_animation_state()
+    ' This function checks the character's animation state based on joystick input
     if is_button_pressed("A")
         character_hitting := true
         character_animation_state := 2
@@ -576,6 +657,7 @@ pub check_animation_state()
         character_animation_state := 0
 
 pub init_controller()
+    ' This function initializes the game controller
     i2c.setup(10, 11, 400, i2c.PU_1K5)
     i2c.start()
     i2c.write($A4)
@@ -597,6 +679,7 @@ pub init_controller()
     waitus(150)
 
 pub read_controller() | i
+    ' This function reads the controller input
     i2c.start()
     i2c.write($A4)
     i2c.write($00)
