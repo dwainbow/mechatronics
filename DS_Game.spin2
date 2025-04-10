@@ -65,11 +65,13 @@ var
 
 pub video_game() | i
     debug(`plot screen pos 100 0 size 768 640 backcolor black update) ' Initialize the game screen
+    init_controller() ' Initialize the game controller
+    waitms(100) ' Wait for a short period
     create_instruction_menu() ' Display the instruction menu
     debug(`screen set 400 330 blue text 50 'Loading sprites...') ' Show loading message
     debug(`screen update) ' Update the screen
-    init_controller() ' Initialize the game controller
     sprites.load_sprites() ' Load the sprite assets
+    waitms(100)
     round_num := 1 ' Set the initial round number
     init_character() ' Initialize the character's properties
     hard_mode := false ' Disable hard mode initially
@@ -110,9 +112,12 @@ pub create_instruction_menu()
     debug(`screen set 400 440 white text 15 'Eliminate as many enemies as possible without dying.')
     debug(`screen set 400 410 white text 15 'Use the joystick to move and buttons to attack or jump.')
     debug(`screen set 400 380 white text 15 'Press A to attack, B to jump, and Select to pause.')
-    debug(`screen set 400 350 white text 15 'Good luck, and have fun!')
+    debug(`screen set 400 350 white text 15 'Good luck, and have fun! Press A to start the game.')
     debug(`screen update)
-    waitms(7000)
+    read_controller()
+    repeat until is_button_pressed("A")
+            read_controller()
+    waitms(100)
     debug(`screen clear)
 
 pub display_health_bar()| i
