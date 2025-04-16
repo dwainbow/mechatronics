@@ -1,0 +1,110 @@
+con _clkfreq = 300_000_000
+
+obj
+    ' Controller Module
+    i2c     : "jm_i2c"
+
+var 
+    ' Controller related variables 
+    controller_data[8]
+    long controller_stack[500]
+
+    ' Debugging related variables 
+    ' Timing-related variables
+    long frame_rate, frame_rate_wait_time
+    long start_time, raw_loop_time, loop_time, display_delay
+con
+    ' Pin Configuation 
+    PIN_0 = 0
+    PIN_1 = 1
+    PIN_2 = 2
+    PIN_3 = 3
+    PIN_4 = 4
+    PIN_5 = 5
+    PIN_6 = 6
+    PIN_7 = 7
+
+    ' Controller Button Config 
+    D_PAD_UP = controller_data[7].[0]
+    D_PAD_DOWN = controller_data[6].[6]
+    X_BUTTON = controller_data[7].[3]
+    B_BUTTON = controller_data[7].[6]
+
+    ' Limits for the motor (Note these are place holders and are subject to change) 
+    DOWN_LIMIT  = 0 
+    UP_LIMIT = 0
+
+
+pub main()
+
+pub is_button_pressed(button) : boolean
+    return button == 0
+
+pub init_controller()
+    ' This function initializes the game controller
+    i2c.setup(10, 11, 400, i2c.PU_1K5)
+    i2c.start()
+    i2c.write($A4)
+    i2c.write($F0)
+    i2c.write($55)
+    i2c.stop()
+    i2c.start()
+    i2c.write($A4)
+    i2c.write($FB)
+    i2c.write($00)
+    i2c.stop()
+    waitus(150)
+
+    i2c.start()
+    i2c.write($A4)
+    i2c.write($FE)
+    i2c.write($03)
+    i2c.stop()
+
+pub read_controller() | i
+    ' This function reads the controller input
+    i2c.start()
+    i2c.write($A4)
+    i2c.write($00)
+    i2c.stop()
+    waitus(150)
+
+    i2c.start()
+    i2c.write($A5)
+    repeat i from 0 to 6
+        controller_data[i] := i2c.read(0)
+    controller_data[7] := i2c.read(1)
+    i2c.stop()
+
+
+'__________________________'
+' Debugging Section '
+
+pub debug()
+    cogspin(1, debug_controller(), @controller_stack) 
+
+pub debug_controller()
+    debug(`term term1 pos 867 0 size 28 12 textsize 18 color cyan)
+    repeat
+        debug(`term1 clear)
+        if is_button_pressed(@X_BUTTON)
+            debug(`term1 'X button IS Pressed',10)
+        else
+            debug(`term1 'X button NOT Pressed',10)
+
+        if is_button_pressed(@B_BUTTON)
+            debug(`term1 'B Button IS Pressed',10)
+        else
+            debug(`term1 'B Button NOT Pressed',10)
+        
+        if is_button_pressed(@D_PAD_UP)
+            debug(`term1 'D-Pad Up Button IS Pressed',10)
+        else
+            debug(`term1 'D-Pad Up Button NOT Pressed',10)
+
+        if is_button_pressed(@D_PAD_DOWN)
+            debug(`term1 'D-Pad Down Button IS Pressed',10)
+        else
+            debug(`term1 'D-Pad Down Button NOT Pressed',10)
+        
+            
