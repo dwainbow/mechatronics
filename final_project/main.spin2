@@ -4,41 +4,107 @@ obj
     ' Controller Module
     i2c     : "jm_i2c"
 
-var 
-    ' Controller related variables 
-    controller_data[8]
-    long controller_stack[500]
+var
+    ' Controller related variables
+    long controller_data[8]
+    long D_PAD_UP, D_PAD_DOWN, X_BUTTON, B_BUTTON
 
-    ' Debugging related variables 
-    ' Timing-related variables
-    long frame_rate, frame_rate_wait_time
-    long start_time, raw_loop_time, loop_time, display_delay
+    ' Motor related variables
+    long MOTOR_POSITION, UP_LIMIT, DOWN_LIMIT
+    ' Debugging related variables
+    long debug_stack[500]
+    long display_delay
+
+    long input_stack[500]
 con
-    ' Pin Configuation 
-    PIN_0 = 0
-    PIN_1 = 1
-    PIN_2 = 2
-    PIN_3 = 3
-    PIN_4 = 4
-    PIN_5 = 5
-    PIN_6 = 6
-    PIN_7 = 7
+    ' Pin Configuation
+    PIN_1 = 1 'This pin sends a signal to the relay
+    PIN_2 = 2 'This pin sends a signal to the relay
+    PIN_7 = 7 'This pin checks the torque of the motor
 
-    ' Controller Button Config 
-    D_PAD_UP = controller_data[7].[0]
-    D_PAD_DOWN = controller_data[6].[6]
-    X_BUTTON = controller_data[7].[3]
-    B_BUTTON = controller_data[7].[6]
+    ' Controller Button Config
 
-    ' Limits for the motor (Note these are place holders and are subject to change) 
-    DOWN_LIMIT  = 0 
-    UP_LIMIT = 0
-
-
+' Note that the relays are reversed logic, so LOW is ON and HIGH is OFF
 pub main()
+    setup_pins()
+    init_controller()
+    init_buttons()
+    init_motor()
+    ' set_lower_limit()
+    debug_all()
+    repeat
+        read_controller()
+        if is_button_pressed(D_PAD_UP)
+            move_motor_CCW()
+        elseif is_button_pressed(D_PAD_DOWN)
+            move_motor_CW()
+        else
+            pin_high(PIN_1)
+            pin_high(PIN_2)
 
+pub move_motor_CCW()
+    if MOTOR_POSITION >= UP_LIMIT
+        pin_high(PIN_1)
+        return
+
+    repeat until MOTOR_POSITION >= UP_LIMIT
+        read_controller()
+        if is_button_pressed(D_PAD_DOWN) || is_button_pressed(X_BUTTON)
+            pin_high(PIN_1)
+            pin_high(PIN_2)
+            waitms(100)
+            return
+        pin_low(PIN_1)
+        MOTOR_POSITION++
+
+pub move_motor_CW()
+    if MOTOR_POSITION <= DOWN_LIMIT
+        pin_high(PIN_2)
+        return
+    repeat until MOTOR_POSITION <= DOWN_LIMIT
+        read_controller()
+        if is_button_pressed(D_PAD_UP) || is_button_pressed(B_BUTTON)
+            pin_high(PIN_1)
+            pin_high(PIN_2)
+            waitms(100)
+            return
+        pin_low(PIN_2)
+        MOTOR_POSITION--
+pub set_lower_limit()
+    DOWN_LIMIT := MOTOR_POSITION
+pub set_upper_limit()
+    UP_LIMIT := MOTOR_POSITION
 pub is_button_pressed(button) : boolean
     return button == 0
+pub toggle_button(button)
+    button := 1 - button
+
+pub setup_pins()
+    ' Set the pins to the output
+    dira.[PIN_1] :=1
+    dira.[PIN_2] :=1
+    ina.[PIN_7] := 1
+
+pub toggle_pin(pin)
+    outa.[pin] := 1 - outa.[pin]
+
+pub pin_high(pin)
+    outa.[pin] := 1
+
+pub pin_low(pin)
+    outa.[pin] := 0
+
+pub init_buttons()
+    D_PAD_UP := controller_data[7].[0]
+    D_PAD_DOWN := controller_data[6].[6]
+    X_BUTTON := controller_data[7].[3]
+    B_BUTTON := controller_data[7].[6]
+
+pub init_motor()
+    ' Note that
+    UP_LIMIT := 100000
+    MOTOR_POSITION := UP_LIMIT
+    DOWN_LIMIT := 0
 
 pub init_controller()
     ' This function initializes the game controller
@@ -76,35 +142,68 @@ pub read_controller() | i
     controller_data[7] := i2c.read(1)
     i2c.stop()
 
+    ' Update button reference values after reading controller data
+    D_PAD_UP := controller_data[7].[0]
+    D_PAD_DOWN := controller_data[6].[6]
+    X_BUTTON := controller_data[7].[3]
+    B_BUTTON := controller_data[7].[6]
+    ' waitms(100)
+
 
 '__________________________'
 ' Debugging Section '
 
-pub debug()
-    cogspin(1, debug_controller(), @controller_stack) 
+pub debug_all()
+    ' cogspin(1, debug_controller(), @debug_stack)
+    ' cogspin(1, debug_motor_position(), @debug_stack)
+    cogspin(1, debug_pin_7(), @debug_stack)
+
+pub debug_pin_7()
+    repeat
+        debug(`term term1 'Pin 7 = `(ina.[PIN_7])',10)        waitms(100)
+
+pub debug_motor_position()
+    debug(`term term1 pos 867 0 size 28 12 textsize 18 color cyan)
+    display_delay := clkfreq / 4 + getct()
+
+    repeat
+        if pollct(display_delay)
+            debug(`term1 clear)
+
+            debug(`term1 '--- Motor Position Debug ---',10)
+            debug(`term1 'Current Position = `(MOTOR_POSITION)',10)
+            debug(`term1 'Upper Limit     = `(UP_LIMIT)',10)
+            debug(`term1 'Lower Limit     = `(DOWN_LIMIT)',10)
+
+            if MOTOR_POSITION >= UP_LIMIT && UP_LIMIT <> 0
+                debug(`term1 'Status: At or above upper limit',10)
+            elseif MOTOR_POSITION <= DOWN_LIMIT && DOWN_LIMIT <> 0
+                debug(`term1 'Status: At or below lower limit',10)
+            else
+                debug(`term1 'Status: Within movement range',10)
+
+            display_delay := getct() + clkfreq / 4
 
 pub debug_controller()
     debug(`term term1 pos 867 0 size 28 12 textsize 18 color cyan)
     repeat
         debug(`term1 clear)
-        if is_button_pressed(@X_BUTTON)
+        if is_button_pressed(X_BUTTON)
             debug(`term1 'X button IS Pressed',10)
         else
             debug(`term1 'X button NOT Pressed',10)
 
-        if is_button_pressed(@B_BUTTON)
+        if is_button_pressed(B_BUTTON)
             debug(`term1 'B Button IS Pressed',10)
         else
             debug(`term1 'B Button NOT Pressed',10)
-        
-        if is_button_pressed(@D_PAD_UP)
+
+        if is_button_pressed(D_PAD_UP)
             debug(`term1 'D-Pad Up Button IS Pressed',10)
         else
             debug(`term1 'D-Pad Up Button NOT Pressed',10)
 
-        if is_button_pressed(@D_PAD_DOWN)
+        if is_button_pressed(D_PAD_DOWN)
             debug(`term1 'D-Pad Down Button IS Pressed',10)
         else
             debug(`term1 'D-Pad Down Button NOT Pressed',10)
-        
-            
